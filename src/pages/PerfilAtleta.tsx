@@ -23,7 +23,13 @@ import {
   Square,
   Zap,
   Footprints,
-  Plus
+  Plus,
+  Check,
+  Loader2,
+  Upload,
+  X,
+  Save,
+  ShieldCheck
 } from 'lucide-react';
 
 // Ícones Customizados para Uniforme (SaaS High-Fidelity)
@@ -54,6 +60,7 @@ const SocksIcon = ({ className }: { className?: string }) => (
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useOrg } from '../context/OrgContext';
+import { cn } from '../lib/utils';
 import Toast from '../components/Toast';
 import NewAthleteForm from '../components/athletes/NewAthleteForm';
 
@@ -65,22 +72,32 @@ interface Athlete {
   position: string;
   number: string;
   whatsapp: string;
-  cpf: string;
-  rg: string;
+  document_cpf: string;
+  document_rg: string;
   birth_date: string;
   status: 'active' | 'inactive' | 'pending';
   modality: string;
   email?: string;
   organization_id: string;
   nickname?: string;
-  address?: string;
-  gender?: string;
+  address_json?: {
+    zip: string;
+    street: string;
+    number: string;
+    complement: string;
+    neighborhood: string;
+    city: string;
+    state: string;
+  };
   sizes_json?: {
-    boots: string;
     shirt: string;
     short: string;
     socks: string;
+    boots: string;
   };
+  gender?: string;
+  created_at: string;
+  club_shield_url?: string;
 }
 
 
@@ -103,6 +120,21 @@ export default function PerfilAtleta() {
   const [memberships, setMemberships] = useState<any[]>([]);
   const [isSavingSubscription, setIsSavingSubscription] = useState(false);
 
+  // Membership Modal Form States
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('');
+  const [payerName, setPayerName] = useState('');
+  const [payerPhone, setPayerPhone] = useState('');
+  const [payerEmail, setPayerEmail] = useState('');
+  const [dueDay, setDueDay] = useState('10');
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | 'boleto'>('pix');
+  const [saveCard, setSaveCard] = useState(false);
+  const [isFree, setIsFree] = useState(false);
+  const [isSavingSubscription, setIsSavingSubscription] = useState(false);
+
+  // Document Modal States
+  const [docTitle, setDocTitle] = useState('');
+  const [docCategory, setDocCategory] = useState('RG');
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     fetchAthleteData();
@@ -117,9 +149,27 @@ export default function PerfilAtleta() {
   const fetchAthleteData = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase!.from('athletes').select('*').eq('id', id).single();
+      const { data, error } = await supabase!
+        .from('athletes')
+        .select(`
+          *,
+          subscription:athlete_subscriptions(
+            *,
+            plan:membership_plans(*)
+          )
+        `)
+        .eq('id', id)
+        .maybeSingle();
+
       if (error) throw error;
-      setAthlete(data);
+      
+      // Handle the case where subscription might be an array or null
+      const processedData = {
+        ...data,
+        subscription: Array.isArray(data.subscription) ? data.subscription[0] : data.subscription
+      };
+      
+      setAthlete(processedData);
 
       // Fetch current subscription
       const { data: subData } = await supabase!
@@ -130,10 +180,52 @@ export default function PerfilAtleta() {
         .maybeSingle();
       
       setCurrentSubscription(subData);
+      
+      if (subData) {
+        setSelectedPlanId(subData.plan_id || 'FREE');
+        setPayerName(subData.payer_name || '');
+        setPayerPhone(subData.payer_phone || '');
+        setPayerEmail(subData.payer_email || '');
+        setDueDay(subData.due_day?.toString() || '10');
+        setPaymentMethod(subData.payment_method || 'pix');
+        setSaveCard(subData.auto_charge || false);
+        setIsFree(subData.status === 'free');
+      }
     } catch (err) {
       console.error(err);
       showToast('Erro ao carregar dados', 'error');
     } finally { setLoading(false); }
+  };
+
+  const handleSaveSubscription = async () => {
+    if (!organization || (!selectedPlanId && !isFree)) return;
+    setIsSavingSubscription(true);
+    try {
+      const { error } = await supabase!
+        .from('athlete_subscriptions')
+        .upsert({
+          athlete_id: id,
+          organization_id: organization.id,
+          plan_id: isFree ? null : selectedPlanId,
+          next_billing_at: isFree ? null : new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString(),
+          status: isFree ? 'free' : 'active',
+          payer_name: payerName,
+          payer_phone: payerPhone,
+          payer_email: payerEmail,
+          due_day: parseInt(dueDay),
+          payment_method: paymentMethod,
+          auto_charge: saveCard
+        }, { onConflict: 'athlete_id' });
+      
+      if (error) throw error;
+      showToast('Configurações salvas com sucesso!');
+      fetchAthleteData();
+      setIsMembershipModalOpen(false);
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setIsSavingSubscription(false);
+    }
   };
 
   const fetchMemberships = async () => {
@@ -214,7 +306,7 @@ export default function PerfilAtleta() {
         </header>
 
         {/* GRID PRINCIPAL */}
-        <div className="grid grid-cols-12 gap-5 items-start">
+        <div className="grid grid-cols-12 gap-5 items-stretch">
           
           {/* COLUNA ESQUERDA - CARD DO ATLETA */}
           <div className="col-span-12 lg:col-span-3">
@@ -298,10 +390,10 @@ export default function PerfilAtleta() {
                 </div>
                 <button 
                   onClick={() => setIsEditModalOpen(true)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-soft border border-border-main hover:border-primary/40 transition-all group/edit"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-soft border border-border-main hover:border-primary/40 transition-all group/edit shadow-sm"
                 >
                   <Edit3 className="w-3 h-3 text-text-subtle group-hover/edit:text-primary" />
-                  <span className="text-[9px] font-black uppercase text-text-subtle group-hover/edit:text-text-main">Editar</span>
+                  <span className="text-[9px] font-black uppercase text-text-subtle group-hover/edit:text-text-main">Editar Atleta</span>
                 </button>
               </div>
               
@@ -331,21 +423,27 @@ export default function PerfilAtleta() {
                   <p className="text-[7px] font-black uppercase text-text-subtle flex items-center gap-2 tracking-widest">
                     <MapPin className="w-3 h-3"/> Endereço
                   </p>
-                  <p className="text-sm font-black italic text-text-main uppercase tracking-tighter truncate">{athlete.address || '---'}</p>
+                  <p className="text-sm font-black italic text-text-main uppercase tracking-tighter truncate" title={formatAddress(athlete.address_json)}>
+                    {formatAddress(athlete.address_json)}
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">
                   <p className="text-[7px] font-black uppercase text-text-subtle flex items-center gap-2 tracking-widest">
                     <IdCard className="w-3 h-3"/> CPF
                   </p>
-                  <p className="text-sm font-black italic text-text-main uppercase tracking-tighter">{athlete.cpf || '---'}</p>
+                  <p className="text-sm font-black italic text-text-main uppercase tracking-tighter">
+                    {athlete.document_cpf || (athlete as any).cpf || '---'}
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">
                   <p className="text-[7px] font-black uppercase text-text-subtle flex items-center gap-2 tracking-widest">
                     <Hash className="w-3 h-3"/> RG
                   </p>
-                  <p className="text-sm font-black italic text-text-main uppercase tracking-tighter">{athlete.rg || '---'}</p>
+                  <p className="text-sm font-black italic text-text-main uppercase tracking-tighter">
+                    {athlete.document_rg || (athlete as any).rg || '---'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -380,26 +478,26 @@ export default function PerfilAtleta() {
                 </div>
                 {/* Calção */}
                 <div className="bg-surface-soft border border-border-main rounded-xl p-2.5 flex flex-col items-center justify-center group hover:border-primary/30 transition-all cursor-default">
-                  <ShortsIcon className="w-5 h-5 text-text-subtle mb-1.5 group-hover:text-primary transition-colors opacity-60" />
-                  <p className="text-[6px] font-black text-text-subtle uppercase tracking-widest mb-1 group-hover:text-primary/70 transition-colors">Calção</p>
-                  <p className="text-[11px] font-black italic text-text-main group-hover:text-primary transition-colors uppercase">
-                    {athlete.sizes_json?.short || 'M'}
+                  <ShortsIcon className="w-6 h-6 text-primary mb-1.5 opacity-80 group-hover:scale-110 transition-transform" />
+                  <p className="text-[6px] font-black text-text-subtle uppercase tracking-widest mb-1">Calção</p>
+                  <p className="text-[11px] font-black italic text-text-main uppercase">
+                    {athlete.sizes_json?.short || '---'}
                   </p>
                 </div>
 
                 <div className="bg-surface-soft border border-border-main rounded-xl p-2.5 flex flex-col items-center justify-center group hover:border-primary/30 transition-all cursor-default">
-                  <SocksIcon className="w-5 h-5 text-text-subtle mb-1.5 group-hover:text-primary transition-colors opacity-60" />
-                  <p className="text-[6px] font-black text-text-subtle uppercase tracking-widest mb-1 group-hover:text-primary/70 transition-colors">Meião</p>
-                  <p className="text-[11px] font-black italic text-text-main group-hover:text-primary transition-colors uppercase">
-                    {athlete.sizes_json?.socks || '38-40'}
+                  <SocksIcon className="w-6 h-6 text-primary mb-1.5 opacity-80 group-hover:scale-110 transition-transform" />
+                  <p className="text-[6px] font-black text-text-subtle uppercase tracking-widest mb-1">Meião</p>
+                  <p className="text-[11px] font-black italic text-text-main uppercase">
+                    {athlete.sizes_json?.socks || '---'}
                   </p>
                 </div>
 
                 <div className="bg-surface-soft border border-border-main rounded-xl p-2.5 flex flex-col items-center justify-center group hover:border-primary/30 transition-all cursor-default">
-                  <CleatsIcon className="w-5 h-5 text-text-subtle mb-1.5 group-hover:text-primary transition-colors opacity-60" />
-                  <p className="text-[6px] font-black text-text-subtle uppercase tracking-widest mb-1 group-hover:text-primary/70 transition-colors">Chuteira</p>
-                  <p className="text-[11px] font-black italic text-text-main group-hover:text-primary transition-colors uppercase">
-                    {athlete.sizes_json?.boots || '41'}
+                  <CleatsIcon className="w-6 h-6 text-primary mb-1.5 opacity-80 group-hover:scale-110 transition-transform" />
+                  <p className="text-[6px] font-black text-text-subtle uppercase tracking-widest mb-1">Chuteira</p>
+                  <p className="text-[11px] font-black italic text-text-main uppercase">
+                    {athlete.sizes_json?.boots || '---'}
                   </p>
                 </div>
               </div>
@@ -484,13 +582,26 @@ export default function PerfilAtleta() {
                 <h3 className="text-[9px] font-black uppercase text-text-main tracking-widest">Documentos</h3>
               </div>
               
-              <div className="space-y-1.5 mb-4">
-                {['RG', 'CPF', 'Atestado Médico'].map((d, i) => (
-                  <div key={i} className="flex items-center justify-between p-2.5 rounded-xl bg-surface-soft border border-border-main group/doc cursor-pointer hover:bg-surface-strong transition-all">
-                    <p className="text-[9px] font-black uppercase text-text-muted tracking-tighter">{d}</p>
-                    <Download className="w-3 h-3 text-text-subtle group-hover/doc:text-primary transition-colors" />
+              <div className="space-y-1.5 mb-4 overflow-y-auto max-h-[180px] no-scrollbar">
+                {(athlete as any).documents_json && (athlete as any).documents_json.length > 0 ? (
+                  (athlete as any).documents_json.map((doc: any, i: number) => (
+                    <div 
+                      key={i} 
+                      onClick={() => window.open(doc.url, '_blank')}
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-surface-soft border border-border-main group/doc cursor-pointer hover:bg-surface-strong transition-all"
+                    >
+                      <div className="flex flex-col">
+                        <p className="text-[8px] font-black uppercase text-text-main tracking-tighter truncate max-w-[150px]">{doc.name}</p>
+                        <p className="text-[6px] font-bold uppercase text-primary/70 tracking-widest">{doc.category || 'Documento'}</p>
+                      </div>
+                      <Download className="w-3 h-3 text-text-subtle group-hover/doc:text-primary transition-colors" />
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-6 text-center border border-dashed border-border-main rounded-xl">
+                    <p className="text-[8px] font-black uppercase text-text-muted tracking-widest">Nenhum documento</p>
                   </div>
-                ))}
+                )}
               </div>
 
               <div className="mt-auto pt-4 border-t border-border-main">
@@ -525,81 +636,216 @@ export default function PerfilAtleta() {
       {/* MODAL: MENSALIDADE */}
       {isMembershipModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
-          <div className="bg-[var(--surface)] w-full max-w-xl rounded-[32px] overflow-hidden shadow-2xl border border-[var(--border)] flex flex-col max-h-[90vh]">
-            <div className="p-5 border-b border-[var(--border)] flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-primary/10 text-primary rounded-xl">
-                  <CreditCard size={20} />
+          <div className="bg-[var(--surface)] w-full max-w-5xl rounded-[32px] overflow-hidden shadow-2xl border border-[var(--border)] flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="p-6 border-b border-[var(--border)] flex items-center justify-between bg-[var(--surface-soft)]/50">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
+                  <CreditCard size={24} className="text-black" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-black uppercase tracking-widest text-[var(--text)] italic">Selecionar Mensalidade</h2>
-                  <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Atribuir plano para {athlete.full_name}</p>
+                  <h2 className="text-base font-black uppercase tracking-tight text-[var(--text)] italic">Configurar Mensalidade</h2>
+                  <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Atleta: {athlete.full_name}</p>
                 </div>
               </div>
-              <button onClick={() => setIsMembershipModalOpen(false)} className="p-2 hover:bg-[var(--surface-soft)] rounded-xl transition-colors">
-                <Plus size={20} className="text-[var(--text-muted)] rotate-45" />
+              <button 
+                onClick={() => setIsMembershipModalOpen(false)} 
+                className="w-10 h-10 rounded-xl bg-[var(--surface-soft)] border border-[var(--border)] flex items-center justify-center hover:border-primary/40 transition-all"
+              >
+                <Plus size={24} className="text-[var(--text-muted)] rotate-45" />
               </button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {memberships.map(membership => (
-                <div key={membership.id} className="space-y-2">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-primary ml-2">{membership.name}</h3>
-                  <div className="grid grid-cols-1 gap-2">
-                    {membership.plans?.map((plan: any) => (
-                      <button 
-                        key={plan.id}
-                        onClick={async () => {
-                          if (!organization) return;
-                          setIsSavingSubscription(true);
-                          try {
-                            const { error } = await supabase!
-                              .from('athlete_subscriptions')
-                              .upsert({
-                                organization_id: organization.id,
-                                plan_id: plan.id,
-                                athlete_id: athlete.id,
-                                next_billing_at: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString(),
-                                status: 'active'
-                              }, { onConflict: 'athlete_id' });
-                            
-                            if (error) throw error;
-                            showToast('Mensalidade atualizada com sucesso!');
-                            fetchAthleteData();
-                            setIsMembershipModalOpen(false);
-                          } catch (err: any) {
-                            showToast(err.message, 'error');
-                          } finally {
-                            setIsSavingSubscription(false);
-                          }
-                        }}
-                        disabled={isSavingSubscription}
-                        className={cn(
-                          "flex items-center justify-between p-4 rounded-2xl border transition-all text-left",
-                          currentSubscription?.plan_id === plan.id 
-                            ? "bg-primary/5 border-primary shadow-[0_0_20px_rgba(189,255,1,0.1)]" 
-                            : "bg-[var(--surface-soft)] border-[var(--border)] hover:border-primary/40"
-                        )}
-                      >
-                        <div>
-                          <p className="text-[11px] font-black uppercase italic text-[var(--text)]">{plan.name}</p>
-                          <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-widest">
-                            {plan.billing_period === 'monthly' ? 'Mensal' : 
-                             plan.billing_period === 'quarterly' ? 'Trimestral' :
-                             plan.billing_period === 'semiannual' ? 'Semestral' : 'Anual'}
-                          </p>
+            <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+              {/* Coluna Esquerda: Seleção de Plano */}
+              <div className="w-full md:w-1/2 p-8 overflow-y-auto border-r border-[var(--border)] no-scrollbar">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">1. Selecione o Plano</h3>
+                    <button 
+                      onClick={() => {
+                        setIsFree(!isFree);
+                        if (!isFree) setSelectedPlanId('FREE');
+                        else setSelectedPlanId('');
+                      }}
+                      className={cn(
+                        "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
+                        isFree 
+                          ? "bg-primary text-black border-primary shadow-lg shadow-primary/20" 
+                          : "bg-surface border-border-main text-text-subtle hover:border-primary/40"
+                      )}
+                    >
+                      Plano Gratuito
+                    </button>
+                  </div>
+
+                  {!isFree ? (
+                    <div className="space-y-6">
+                      {memberships.map(membership => (
+                        <div key={membership.id} className="space-y-3">
+                          <p className="text-[9px] font-black uppercase tracking-[0.3em] text-[var(--text-muted)] ml-1">{membership.name}</p>
+                          <div className="grid grid-cols-1 gap-2.5">
+                            {membership.plans?.map((plan: any) => (
+                              <button 
+                                key={plan.id}
+                                onClick={() => setSelectedPlanId(plan.id)}
+                                className={cn(
+                                  "flex items-center justify-between p-5 rounded-2xl border transition-all text-left group",
+                                  selectedPlanId === plan.id 
+                                    ? "bg-primary/10 border-primary shadow-[0_0_20px_rgba(189,255,1,0.05)]" 
+                                    : "bg-[var(--surface-soft)] border-[var(--border)] hover:border-primary/40"
+                                )}
+                              >
+                                <div className="flex items-center gap-4">
+                                  <div className={cn(
+                                    "w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all",
+                                    selectedPlanId === plan.id ? "border-primary bg-primary" : "border-[var(--border)] bg-transparent"
+                                  )}>
+                                    {selectedPlanId === plan.id && <Check size={10} className="text-black" strokeWidth={4} />}
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-black uppercase italic text-[var(--text)] group-hover:text-primary transition-colors">{plan.name}</p>
+                                    <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-widest">
+                                      Recorrência {plan.billing_period === 'monthly' ? 'Mensal' : 
+                                       plan.billing_period === 'quarterly' ? 'Trimestral' :
+                                       plan.billing_period === 'semiannual' ? 'Semestral' : 'Anual'}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-base font-black italic text-primary">R$ {plan.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                  {currentSubscription?.plan_id === plan.id && (
+                                    <span className="text-[7px] font-black uppercase text-emerald-500 tracking-widest">Plano Atual</span>
+                                  )}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm font-black italic text-primary">R$ {plan.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                          {currentSubscription?.plan_id === plan.id && (
-                            <span className="text-[8px] font-black uppercase text-primary">Plano Atual</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-12 border-2 border-dashed border-primary/20 rounded-[32px] bg-primary/5 flex flex-col items-center justify-center text-center animate-in zoom-in-95 duration-300">
+                      <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mb-4">
+                        <Zap size={32} className="text-primary" />
+                      </div>
+                      <h4 className="text-sm font-black uppercase italic text-primary mb-2">Modalidade Isenta</h4>
+                      <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase leading-relaxed max-w-[240px]">
+                        O atleta terá acesso total à plataforma sem cobranças automáticas ou controle de mensalidade.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Coluna Direita: Informações de Pagamento */}
+              <div className="w-full md:w-1/2 p-8 bg-[var(--surface-soft)]/30 overflow-y-auto no-scrollbar">
+                <div className="space-y-8 h-full flex flex-col">
+                  <div>
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary mb-6">2. Dados do Pagador & Cobrança</h3>
+                    
+                    <div className="space-y-5">
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Nome do Responsável</label>
+                          <input 
+                            value={payerName} 
+                            onChange={(e) => setPayerName(e.target.value)}
+                            className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                            placeholder="Ex: Nome do Pai ou Mãe"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">WhatsApp / Celular</label>
+                            <input 
+                              value={payerPhone} 
+                              onChange={(e) => setPayerPhone(e.target.value)}
+                              className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                              placeholder="(00) 00000-0000"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">E-mail</label>
+                            <input 
+                              value={payerEmail} 
+                              onChange={(e) => setPayerEmail(e.target.value)}
+                              className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                              placeholder="pagamento@email.com"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {!isFree && (
+                        <div className="space-y-5 pt-4 border-t border-[var(--border)]">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Dia de Vencimento</label>
+                              <select 
+                                value={dueDay} 
+                                onChange={(e) => setDueDay(e.target.value)}
+                                className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)] appearance-none"
+                              >
+                                {[5, 10, 15, 20, 25].map(d => <option key={d} value={d}>Dia {d}</option>)}
+                              </select>
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Método Preferencial</label>
+                              <select 
+                                value={paymentMethod} 
+                                onChange={(e) => setPaymentMethod(e.target.value as any)}
+                                className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)] appearance-none"
+                              >
+                                <option value="pix">PIX (Mais Rápido)</option>
+                                <option value="card">Cartão de Crédito</option>
+                                <option value="boleto">Boleto Bancário</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {paymentMethod === 'card' && (
+                            <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 flex items-center justify-between animate-in slide-in-from-top-2 duration-300">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center">
+                                  <ShieldCheck size={20} className="text-primary" />
+                                </div>
+                                <div>
+                                  <p className="text-[9px] font-black uppercase text-[var(--text)] italic">Pagamento Recorrente</p>
+                                  <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase tracking-widest">Salvar para cobrança automática</p>
+                                </div>
+                              </div>
+                              <button 
+                                onClick={() => setSaveCard(!saveCard)}
+                                className={cn(
+                                  "w-12 h-6 rounded-full relative transition-all duration-300",
+                                  saveCard ? "bg-primary" : "bg-[var(--surface-strong)]"
+                                )}
+                              >
+                                <div className={cn(
+                                  "absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-300 shadow-sm",
+                                  saveCard ? "left-7" : "left-1"
+                                )} />
+                              </button>
+                            </div>
                           )}
                         </div>
-                      </button>
-                    ))}
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-auto">
+                    <button 
+                      onClick={handleSaveSubscription}
+                      disabled={isSavingSubscription || (!isFree && !selectedPlanId)}
+                      className="w-full py-5 bg-primary text-black rounded-[24px] text-[11px] font-black uppercase tracking-[0.2em] hover:scale-[1.02] active:scale-[0.98] transition-all shadow-2xl shadow-primary/30 flex items-center justify-center gap-3 disabled:opacity-50"
+                    >
+                      {isSavingSubscription ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} strokeWidth={3} />}
+                      {isFree ? 'Confirmar Isenção' : 'Ativar Assinatura'}
+                    </button>
                   </div>
                 </div>
-              ))}
+              </div>
             </div>
           </div>
         </div>
@@ -608,60 +854,125 @@ export default function PerfilAtleta() {
       {/* MODAL: NOVO DOCUMENTO */}
       {isDocumentModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
-          <div className="bg-[var(--surface)] w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl border border-[var(--border)]">
+          <div className="bg-[var(--surface)] w-full max-w-lg rounded-[32px] overflow-hidden shadow-2xl border border-[var(--border)] flex flex-col">
             <div className="p-6 border-b border-[var(--border)] flex items-center justify-between bg-[var(--surface-soft)]/50">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-primary/10 text-primary rounded-xl">
-                  <FileText size={20} />
+                <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
+                  <Upload size={20} className="text-black" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-black uppercase tracking-widest text-[var(--text)] italic">Novo Documento</h2>
-                  <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Upload de Dossiê</p>
-                </div>
-              </div>
-              <button onClick={() => setIsDocumentModalOpen(false)} className="p-2 hover:bg-[var(--surface-soft)] rounded-xl transition-colors">
-                <Plus size={20} className="text-[var(--text-muted)] rotate-45" />
-              </button>
-            </div>
-            <form className="p-6 space-y-5" onSubmit={(e) => {
-              e.preventDefault();
-              showToast('Upload realizado com sucesso! (Demonstração)');
-              setIsDocumentModalOpen(false);
-            }}>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Título do Documento</label>
-                <input 
-                  type="text" 
-                  placeholder="Ex: Atestado Médico 2024"
-                  className="w-full bg-[var(--surface-soft)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Arquivo</label>
-                <div className="relative group">
-                  <input 
-                    type="file" 
-                    className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                    required
-                  />
-                  <div className="w-full bg-[var(--surface-soft)] border-2 border-dashed border-[var(--border)] group-hover:border-primary/40 rounded-2xl p-8 flex flex-col items-center justify-center transition-all">
-                    <Plus size={24} className="text-primary/40 group-hover:text-primary mb-2 transition-colors" />
-                    <p className="text-[10px] font-black uppercase text-[var(--text-muted)]">Clique ou arraste o arquivo</p>
-                    <p className="text-[8px] font-bold text-[var(--text-muted)] opacity-40 uppercase mt-1">PDF, JPG ou PNG (Máx 5MB)</p>
-                  </div>
+                  <h2 className="text-sm font-black uppercase tracking-tight text-[var(--text)] italic">Novo Documento</h2>
+                  <p className="text-[9px] font-bold text-primary uppercase tracking-widest">Anexar ao Dossiê</p>
                 </div>
               </div>
               <button 
-                type="submit"
-                className="w-full py-4 bg-primary text-black rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-primary/20 mt-2"
+                onClick={() => setIsDocumentModalOpen(false)} 
+                className="w-8 h-8 rounded-lg bg-[var(--surface-soft)] border border-[var(--border)] flex items-center justify-center hover:border-primary/40 transition-all"
               >
-                Enviar Documento
+                <X size={18} className="text-[var(--text-muted)]" />
               </button>
-            </form>
+            </div>
+
+            <div className="p-8 space-y-6">
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Título do Documento</label>
+                <input 
+                  value={docTitle} 
+                  onChange={(e) => setDocTitle(e.target.value)}
+                  className="w-full bg-[var(--surface-soft)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                  placeholder="Ex: RG - Frente"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Categoria</label>
+                <select 
+                  value={docCategory}
+                  onChange={(e) => setDocCategory(e.target.value)}
+                  className="w-full bg-[var(--surface-soft)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)] appearance-none"
+                >
+                  <option value="RG">RG</option>
+                  <option value="CPF">CPF</option>
+                  <option value="Atestado Médico">Atestado Médico</option>
+                  <option value="Contrato">Contrato</option>
+                  <option value="Outros">Outros</option>
+                </select>
+              </div>
+
+              <label className="relative border-2 border-dashed border-[var(--border)] rounded-[24px] p-10 flex flex-col items-center justify-center bg-[var(--surface-soft)]/30 hover:border-primary/40 transition-all cursor-pointer group">
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    
+                    setIsUploading(true);
+                    try {
+                      const fileExt = file.name.split('.').pop();
+                      const fileName = `doc-${Date.now()}.${fileExt}`;
+                      
+                      const { error: uploadError } = await supabase!.storage
+                        .from('documents')
+                        .upload(fileName, file);
+                      
+                      if (uploadError) throw uploadError;
+                      
+                      const { data: { publicUrl } } = supabase!.storage.from('documents').getPublicUrl(fileName);
+                      
+                      const newDoc = { name: docTitle || file.name, category: docCategory, url: publicUrl, date: new Date().toISOString() };
+                      const currentDocs = athlete.documents_json || [];
+                      
+                      const { error: updateError } = await supabase!
+                        .from('athletes')
+                        .update({ documents_json: [...currentDocs, newDoc] })
+                        .eq('id', athlete.id);
+                        
+                      if (updateError) throw updateError;
+                      
+                      showToast('Documento enviado com sucesso!');
+                      fetchAthleteData();
+                      setIsDocumentModalOpen(false);
+                      setDocTitle('');
+                    } catch (err: any) {
+                      showToast(err.message, 'error');
+                    } finally {
+                      setIsUploading(false);
+                    }
+                  }}
+                />
+                <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                  <Upload size={24} className="text-primary" />
+                </div>
+                <p className="text-[10px] font-black uppercase text-[var(--text)] mb-1">
+                  {isUploading ? 'Enviando...' : 'Clique para selecionar arquivo'}
+                </p>
+                <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-widest">PDF, PNG ou JPG (Max 5MB)</p>
+              </label>
+
+              <button 
+                disabled={isUploading || !docTitle}
+                className="w-full py-4 bg-primary text-black rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-3 disabled:opacity-50"
+              >
+                {isUploading ? <Loader2 className="animate-spin" size={16} /> : <Check size={16} strokeWidth={3} />}
+                Salvar Documento
+              </button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
+}
+
+function formatAddress(address: any) {
+  if (!address || typeof address !== 'object') return 'Endereço não informado';
+  const parts = [];
+  if (address.street) parts.push(address.street);
+  if (address.number) parts.push(address.number);
+  if (address.complement) parts.push(address.complement);
+  if (address.neighborhood) parts.push(address.neighborhood);
+  if (address.city) parts.push(address.city);
+  if (address.state) parts.push(address.state);
+  return parts.length > 0 ? parts.join(', ') : 'Endereço não informado';
 }
