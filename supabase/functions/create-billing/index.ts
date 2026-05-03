@@ -18,14 +18,13 @@ serve(async (req) => {
     console.log('Recebido na Function:', JSON.stringify(data));
 
     const amount = Number.parseInt(String(data.amountCentavos)) || 1000;
-    const method = data.method?.toUpperCase() || 'PIX';
+    const method = String(data.method || 'PIX').toUpperCase();
     const isPix = method === 'PIX';
     
     let endpoint = '';
     let payload = {};
 
     if (isPix) {
-      // Usar Checkout Transparente para PIX (conforme desejado pelo usuário para ficar no ambiente)
       endpoint = '/transparents/create';
       payload = {
         method: 'PIX',
@@ -42,22 +41,21 @@ serve(async (req) => {
         }
       };
     } else {
-      // Usar Checkout Padrão para Cartão (Redirecionamento)
       endpoint = '/checkouts/create';
       payload = {
         frequency: 'ONE_TIME',
         methods: ['CARD'],
         products: [
           {
-            externalId: data.productId || 'prod_default',
+            externalId: data.externalId || 'prod_default',
             name: data.description || 'Assinatura TimesPro',
             quantity: 1,
-            price: amount // Tentar passar o preço dinâmico
+            price: amount
           }
         ],
-        returnUrl: data.returnUrl,
-        completionUrl: data.completionUrl,
-        customerId: data.externalId // Usar externalId como customerId se disponível
+        returnUrl: data.returnUrl || 'https://timespro.com.br',
+        completionUrl: data.completionUrl || 'https://timespro.com.br',
+        // Removido customerId para evitar erro se o ID não for cust_...
       };
     }
 
@@ -76,31 +74,28 @@ serve(async (req) => {
     console.log('AbacatePay Response:', JSON.stringify(result));
 
     if (!response.ok) {
+      // Retorna o erro detalhado para o frontend
+      const errorMessage = result.error || (result.errors && result.errors[0]?.message) || `API Error: ${response.statusText}`;
       return new Response(JSON.stringify({ 
         success: false,
-        error: result.error || `API Error: ${response.statusText}`,
-        debug_endpoint: endpoint,
-        debug_payload: payload 
+        error: errorMessage,
+        debug: result
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
+        status: 200, // Mantemos 200 para o frontend tratar no objeto success
       });
     }
 
-    // Mapear resposta para o formato esperado pelo frontend
-    // O frontend espera data.pix.qrcode e data.pix.code para PIX
     if (isPix && result.data) {
-      const pixInfo = {
-        qrcode: result.data.brCodeBase64,
-        code: result.data.brCode,
-        id: result.data.id
-      };
-      
       return new Response(JSON.stringify({ 
         success: true, 
         data: { 
-          pix: pixInfo,
-          url: result.data.url, // URL de checkout se o usuário preferir abrir
+          pix: {
+            qrcode: result.data.brCodeBase64,
+            code: result.data.brCode,
+            id: result.data.id
+          },
+          url: result.data.url,
           ...result.data 
         } 
       }), {
@@ -109,14 +104,11 @@ serve(async (req) => {
       });
     }
 
-    // Para Cartão, o AbacatePay v2 retorna a URL no nível superior ou dentro de data
-    const url = result.data?.url || result.url;
-    
     return new Response(JSON.stringify({
       success: true,
       data: {
         ...result.data,
-        url: url
+        url: result.data?.url || result.url
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -235,6 +235,10 @@ export default function Checkout() {
       });
 
       if (error) throw error;
+      
+      if (result?.success === false) {
+        throw new Error(result.error || 'Erro ao processar pagamento');
+      }
 
       const data = result?.data?.billing || result?.data || result?.billing || result;
 
