@@ -68,7 +68,9 @@ interface Athlete {
   id: string;
   full_name: string;
   photo_url: string | null;
-  category: string;
+  category?: { name: string };
+  modality?: { name: string };
+  position_data?: { name: string };
   position: string;
   number: string;
   whatsapp: string;
@@ -76,7 +78,6 @@ interface Athlete {
   document_rg: string;
   birth_date: string;
   status: 'active' | 'inactive' | 'pending';
-  modality: string;
   email?: string;
   organization_id: string;
   nickname?: string;
@@ -168,6 +169,9 @@ export default function PerfilAtleta() {
         .from('athletes')
         .select(`
           *,
+          category:athlete_categories(name),
+          modality:athlete_modalities(name),
+          position_data:athlete_positions(name),
           subscription:athlete_subscriptions(
             *,
             plan:membership_plans(*)
@@ -178,9 +182,12 @@ export default function PerfilAtleta() {
 
       if (error) throw error;
       
-      // Handle the case where subscription might be an array or null
+      // Garantir que os joins sejam objetos e não arrays (comportamento comum do PostgREST em joins)
       const processedData = {
         ...data,
+        category: Array.isArray(data.category) ? data.category[0] : data.category,
+        modality: Array.isArray(data.modality) ? data.modality[0] : data.modality,
+        position_data: Array.isArray(data.position_data) ? data.position_data[0] : data.position_data,
         subscription: Array.isArray(data.subscription) ? data.subscription[0] : data.subscription
       };
       
@@ -407,9 +414,13 @@ export default function PerfilAtleta() {
                       {athlete.nickname || athlete.full_name.split(' ')[0]}
                     </h2>
                     <div className="flex flex-wrap gap-1.5">
-                      {[athlete.position, athlete.category, athlete.modality].map((tag, i) => (
+                      {[
+                        athlete.position_data?.name || athlete.position, 
+                        athlete.category?.name, 
+                        athlete.modality?.name
+                      ].filter(Boolean).map((tag, i) => (
                         <span key={i} className="text-[7px] font-black uppercase bg-primary/10 border border-primary/20 text-primary-dark px-2 py-0.5 rounded-md italic tracking-tight">
-                          {tag || '---'}
+                          {tag}
                         </span>
                       ))}
                     </div>
@@ -497,7 +508,7 @@ export default function PerfilAtleta() {
                     <MapPin className="w-3 h-3"/> Endereço
                   </p>
                   <p className="text-sm font-black italic text-text-main uppercase tracking-tighter truncate" title={formatAddress(athlete.address_json)}>
-                    {formatAddress(athlete.address_json)}
+                    {formatAddress(athlete.address_json) || 'Endereço não informado'}
                   </p>
                 </div>
 
@@ -506,13 +517,13 @@ export default function PerfilAtleta() {
                     <IdCard className="w-3 h-3"/> CPF
                   </p>
                   <p className="text-sm font-black italic text-text-main uppercase tracking-tighter">
-                    {athlete.document_cpf || (athlete as any).cpf || '---'}
+                    {athlete.document_cpf || (athlete as any).cpf || athlete.address_json?.payerCpf || '---'}
                   </p>
                 </div>
 
-                <div className="space-y-1.5">
-                  <p className="text-[7px] font-black uppercase text-text-subtle flex items-center gap-2 tracking-widest">
-                    <Hash className="w-3 h-3"/> RG
+                <div>
+                  <p className="text-[7px] font-black text-text-subtle uppercase mb-1 tracking-widest flex items-center gap-1">
+                    <Fingerprint className="w-3 h-3"/> RG
                   </p>
                   <p className="text-sm font-black italic text-text-main uppercase tracking-tighter">
                     {athlete.document_rg || (athlete as any).rg || '---'}
@@ -798,13 +809,13 @@ export default function PerfilAtleta() {
                       ))}
                     </div>
                   ) : (
-                    <div className="p-12 border-2 border-dashed border-primary/20 rounded-[32px] bg-primary/5 flex flex-col items-center justify-center text-center animate-in zoom-in-95 duration-300">
+                    <div className="p-12 border-2 border-dashed border-primary/20 rounded-[32px] bg-primary/5 flex flex-col items-center justify-center text-center animate-in zoom-in-95 duration-300 h-[300px]">
                       <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mb-4">
                         <Zap size={32} className="text-primary" />
                       </div>
-                      <h4 className="text-sm font-black uppercase italic text-primary mb-2">Modalidade Isenta</h4>
+                      <h4 className="text-sm font-black uppercase italic text-primary mb-2">Plano Gratuito Ativado</h4>
                       <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase leading-relaxed max-w-[240px]">
-                        O atleta terá acesso total à plataforma sem cobranças automáticas ou controle de mensalidade.
+                        Isenção total de cobrança para este atleta.
                       </p>
                     </div>
                   )}
@@ -812,8 +823,8 @@ export default function PerfilAtleta() {
               </div>
 
               {/* Coluna Direita: Informações de Pagamento */}
-              <div className="w-full md:w-1/2 p-8 bg-[var(--surface-soft)]/30 overflow-y-auto no-scrollbar">
-                <div className="space-y-8 h-full flex flex-col">
+              <div className="w-full md:w-1/2 p-8 bg-[var(--surface-soft)]/30 overflow-y-auto custom-scrollbar flex flex-col">
+                <div className="space-y-8 flex-1">
                   <div>
                     <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary mb-6">2. Dados do Pagador & Cobrança</h3>
                     
@@ -983,42 +994,14 @@ export default function PerfilAtleta() {
                                         placeholder="***"
                                       />
                                     </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {paymentMethod === 'card' && (
-                            <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 flex items-center justify-between animate-in slide-in-from-top-2 duration-300">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center">
-                                  <ShieldCheck size={20} className="text-primary" />
-                                </div>
-                                <div>
-                                  <p className="text-[9px] font-black uppercase text-[var(--text)] italic">Pagamento Recorrente</p>
-                                  <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase tracking-widest">Salvar para cobrança automática</p>
-                                </div>
-                              </div>
-                              <button 
-                                onClick={() => setSaveCard(!saveCard)}
-                                className={cn(
-                                  "w-12 h-6 rounded-full relative transition-all duration-300",
-                                  saveCard ? "bg-primary" : "bg-[var(--surface-strong)]"
-                                )}
-                              >
-                                <div className={cn(
-                                  "absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-300 shadow-sm",
-                                  saveCard ? "left-7" : "left-1"
-                                )} />
-                              </button>
                             </div>
                           )}
                         </div>
                       )}
                     </div>
-                  
-                  <div className="mt-auto">
+                  </div>
+
+                  <div className="mt-auto pt-6 border-t border-[var(--border)]">
                     <button 
                       onClick={handleSaveSubscription}
                       disabled={isSavingSubscription || (!isFree && !selectedPlanId)}
