@@ -145,13 +145,15 @@ export default function PerfilAtleta() {
 
       let checkoutUrl = '';
       if (error) {
-        const payload = btoa(JSON.stringify({
+        const payloadData = {
           ...billingData,
           athlete_name: athlete.full_name,
           org_name: organization?.name || 'Clube Parceiro',
           org_logo: organization?.logo_url,
           amount: parseFloat(monthlyFee)
-        }));
+        };
+        // Codificação segura para UTF-8 no navegador
+        const payload = btoa(encodeURIComponent(JSON.stringify(payloadData)));
         checkoutUrl = `${window.location.origin}/checkout/f_${payload}`;
       } else {
         checkoutUrl = `${window.location.origin}/checkout/${data.id}`;

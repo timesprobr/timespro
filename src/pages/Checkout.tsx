@@ -61,11 +61,12 @@ const Checkout: React.FC = () => {
         if (id.startsWith('f_')) {
           console.log('Detectado payload de fallback:', id);
           const payloadBase64 = id.substring(2);
-          const decodedData = JSON.parse(atob(payloadBase64));
+          // Decodificação segura para UTF-8
+          const decodedData = JSON.parse(decodeURIComponent(atob(payloadBase64)));
           console.log('Dados decodificados:', decodedData);
           
           setBillingData(decodedData);
-          setAmount(decodedData.amount || 49.90);
+          setAmount(decodedData.amount || 80.00);
           setOrganizationOverride({
             name: decodedData.org_name || 'Clube Parceiro',
             logo_url: decodedData.org_logo
@@ -223,16 +224,19 @@ const Checkout: React.FC = () => {
           setPixData({
             qrcode: data.pix.qrcode,
             code: data.pix.code,
-            url: data.url || result.url
+            url: data.url || result.url || data.pix.url
           });
           setTimeLeft(1800);
           showToast('Código PIX gerado com sucesso!');
+        } else if (data?.url || result?.url) {
+          // Fallback para URL de checkout se não houver dados transparentes
+          window.location.href = data?.url || result?.url;
         } else {
           console.error('Dados do PIX ausentes na resposta:', data);
           throw new Error('A API não retornou os dados do PIX. Verifique os logs.');
         }
-      } else if (method === 'card' && data?.url) {
-        window.location.href = data.url;
+      } else if (data?.url || result?.url) {
+        window.location.href = data?.url || result?.url;
       } else if (data?.url) {
         // Fallback para qualquer URL retornada
         window.location.href = data.url;
@@ -284,11 +288,12 @@ const Checkout: React.FC = () => {
         {!pixData ? (
           <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-1000 ease-out">
             
-            {/* Premium Summary Card - Estilo Wallet Modern */}
+            {/* Premium Summary Card - Estilo Wallet Modern com Degradê */}
             <div className="relative">
-              <div className="bg-[#0D0D0D] rounded-[32px] p-8 text-white shadow-2xl overflow-hidden border border-white/5">
-                {/* Wallet Ghost Icon */}
-                <Wallet className="absolute -right-6 top-1/2 -translate-y-1/2 w-48 h-48 text-white/[0.03] -rotate-12 pointer-events-none" />
+              <div className="bg-gradient-to-br from-[#0D0D0D] via-[#1A1A1A] to-[#0D0D0D] rounded-[32px] p-8 text-white shadow-2xl overflow-hidden border border-white/5 relative">
+                {/* Visual Elements */}
+                <div className="absolute top-0 right-0 w-32 h-32 bg-[#A3E635]/5 blur-[60px] rounded-full -translate-y-1/2 translate-x-1/2" />
+                <Wallet className="absolute -right-6 top-1/2 -translate-y-1/2 w-48 h-48 text-white/[0.02] -rotate-12 pointer-events-none" />
                 
                 <div className="relative z-10 space-y-8">
                   <div className="flex justify-between items-start">
@@ -297,23 +302,28 @@ const Checkout: React.FC = () => {
                         <div className="w-2 h-2 rounded-full bg-[#A3E635] shadow-[0_0_8px_#A3E635]"></div>
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Resumo do Plano</span>
                       </div>
-                      <h3 className="font-display font-black text-[26px] text-white leading-tight tracking-tight">
+                      <h3 className="font-display font-black text-[24px] text-white leading-tight tracking-tight">
                         {billingData?.description || 'Mensalidade - Atleta'}
                       </h3>
-                      <p className="text-[13px] text-[#A3E635] font-black uppercase tracking-widest">
-                        {displayOrg?.name || 'Racing FC'}
-                      </p>
+                      <div className="flex items-center gap-2">
+                         <p className="text-[12px] text-[#A3E635] font-black uppercase tracking-[0.2em]">
+                           {displayOrg?.name || 'Racing FC'}
+                         </p>
+                      </div>
+                    </div>
+                    <div className="bg-white/5 p-3 rounded-2xl border border-white/10 backdrop-blur-md">
+                      <CreditCard className="w-6 h-6 text-[#A3E635]" />
                     </div>
                   </div>
 
                   <div className="pt-6 border-t border-white/10 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-2 px-4 py-2.5 bg-white/5 rounded-2xl border border-white/10 backdrop-blur-sm">
-                      <ShieldCheck className="w-4 h-4 text-[#A3E635]" />
-                      <span className="text-[10px] font-black text-white/70 uppercase tracking-widest leading-none">Pagamento Seguro</span>
+                    <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full border border-white/5 backdrop-blur-sm">
+                      <ShieldCheck className="w-3.5 h-3.5 text-[#A3E635]" />
+                      <span className="text-[9px] font-black text-white/50 uppercase tracking-widest leading-none">Pagamento Seguro</span>
                     </div>
                     <div className="text-right">
-                      <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-1">Valor Total</p>
-                      <div className="text-[34px] font-black text-white tracking-tighter whitespace-nowrap leading-none">
+                      <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-1">Total a Pagar</p>
+                      <div className="text-[32px] font-black text-white tracking-tighter whitespace-nowrap leading-none">
                         R$ {amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
