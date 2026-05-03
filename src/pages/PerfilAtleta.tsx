@@ -126,10 +126,25 @@ export default function PerfilAtleta() {
   const [payerPhone, setPayerPhone] = useState('');
   const [payerEmail, setPayerEmail] = useState('');
   const [dueDay, setDueDay] = useState('10');
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | 'boleto'>('pix');
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card'>('pix');
   const [saveCard, setSaveCard] = useState(false);
   const [isFree, setIsFree] = useState(false);
-  const [isSavingSubscription, setIsSavingSubscription] = useState(false);
+  
+  // Novos campos para Pagador (Checkout Transparente Card)
+  const [payerCpf, setPayerCpf] = useState('');
+  const [payerZip, setPayerZip] = useState('');
+  const [payerStreet, setPayerStreet] = useState('');
+  const [payerNumber, setPayerNumber] = useState('');
+  const [payerComplement, setPayerComplement] = useState('');
+  const [payerNeighborhood, setPayerNeighborhood] = useState('');
+  const [payerCity, setPayerCity] = useState('');
+  const [payerState, setPayerState] = useState('');
+  
+  // Dados do Cartão
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardHolder, setCardHolder] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
 
   // Document Modal States
   const [docTitle, setDocTitle] = useState('');
@@ -201,7 +216,8 @@ export default function PerfilAtleta() {
     if (!organization || (!selectedPlanId && !isFree)) return;
     setIsSavingSubscription(true);
     try {
-      const { error } = await supabase!
+      // 1. Salvar dados básicos no banco local
+      const { error: dbError } = await supabase!
         .from('athlete_subscriptions')
         .upsert({
           athlete_id: id,
@@ -214,15 +230,72 @@ export default function PerfilAtleta() {
           payer_email: payerEmail,
           due_day: parseInt(dueDay),
           payment_method: paymentMethod,
-          auto_charge: saveCard
+          auto_charge: saveCard,
+          payer_cpf: payerCpf,
+          payer_address: {
+            zip: payerZip,
+            street: payerStreet,
+            number: payerNumber,
+            complement: payerComplement,
+            neighborhood: payerNeighborhood,
+            city: payerCity,
+            state: payerState
+          }
         }, { onConflict: 'athlete_id' });
       
-      if (error) throw error;
-      showToast('Configurações salvas com sucesso!');
+      if (dbError) throw dbError;
+
+      // 2. Se não for free, processar cobrança inicial via Edge Function
+      if (!isFree) {
+        const selectedPlan = memberships.flatMap(m => m.plans).find(p => p.id === selectedPlanId);
+        
+        const { data: billingData, error: billingError } = await supabase!.functions.invoke('create-billing', {
+          body: {
+            amountCentavos: (selectedPlan?.amount || 0) * 100,
+            method: paymentMethod === 'pix' ? 'PIX' : 'CARD',
+            customerName: payerName,
+            customerEmail: payerEmail,
+            customerTaxId: payerCpf,
+            customerPhone: payerPhone,
+            customerAddress: {
+              zip: payerZip,
+              street: payerStreet,
+              number: payerNumber,
+              complement: payerComplement,
+              neighborhood: payerNeighborhood,
+              city: payerCity,
+              state: payerState
+            },
+            description: `Assinatura: ${selectedPlan?.name}`,
+            externalId: `sub_${id}_${Date.now()}`,
+            // Se for cartão, enviamos os dados para processamento transparente
+            card: paymentMethod === 'card' ? {
+              number: cardNumber.replace(/\s/g, ''),
+              holder: cardHolder,
+              expiry: cardExpiry,
+              cvv: cardCvv
+            } : null
+          }
+        });
+
+        if (billingError) throw billingError;
+        if (!billingData.success) throw new Error(billingData.error);
+
+        if (paymentMethod === 'pix' && billingData.data?.pix) {
+          // Mostrar QR Code Pix (Pode precisar de um modal de PIX aqui)
+          showToast('Assinatura criada! Use o QR Code para pagar.', 'success');
+        } else {
+          showToast('Assinatura ativada com sucesso!');
+        }
+      } else {
+        showToast('Isenção confirmada com sucesso!');
+      }
+
       fetchAthleteData();
       setIsMembershipModalOpen(false);
     } catch (err: any) {
-      showToast(err.message, 'error');
+      console.error('Erro ao salvar assinatura:', err);
+      showToast(err.message || 'Erro ao processar assinatura', 'error');
     } finally {
       setIsSavingSubscription(false);
     }
@@ -799,10 +872,122 @@ export default function PerfilAtleta() {
                               >
                                 <option value="pix">PIX (Mais Rápido)</option>
                                 <option value="card">Cartão de Crédito</option>
-                                <option value="boleto">Boleto Bancário</option>
                               </select>
                             </div>
                           </div>
+
+                          {/* Seção Cartão: Dados do Pagador Avançados + Cartão */}
+                          {paymentMethod === 'card' && (
+                            <div className="space-y-6 animate-in slide-in-from-top-4 duration-500">
+                              <div className="pt-4 border-t border-border-main/50">
+                                <p className="text-[8px] font-black uppercase text-primary tracking-[0.2em] mb-4">Dados Fiscais do Pagador</p>
+                                <div className="grid grid-cols-1 gap-4">
+                                  <div className="space-y-1.5">
+                                    <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">CPF do Pagador</label>
+                                    <input 
+                                      value={payerCpf} 
+                                      onChange={(e) => setPayerCpf(e.target.value)}
+                                      className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                                      placeholder="000.000.000-00"
+                                    />
+                                  </div>
+                                  
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1.5">
+                                      <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">CEP</label>
+                                      <input 
+                                        value={payerZip} 
+                                        onChange={(e) => setPayerZip(e.target.value)}
+                                        className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                                        placeholder="00000-000"
+                                      />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                      <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Bairro</label>
+                                      <input 
+                                        value={payerNeighborhood} 
+                                        onChange={(e) => setPayerNeighborhood(e.target.value)}
+                                        className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                                        placeholder="Centro"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-4 gap-4">
+                                    <div className="col-span-3 space-y-1.5">
+                                      <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Logradouro (Rua/Av)</label>
+                                      <input 
+                                        value={payerStreet} 
+                                        onChange={(e) => setPayerStreet(e.target.value)}
+                                        className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                                        placeholder="Rua das Flores"
+                                      />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                      <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Nº</label>
+                                      <input 
+                                        value={payerNumber} 
+                                        onChange={(e) => setPayerNumber(e.target.value)}
+                                        className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                                        placeholder="123"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="pt-4 border-t border-border-main/50">
+                                <p className="text-[8px] font-black uppercase text-primary tracking-[0.2em] mb-4">Dados do Cartão de Crédito</p>
+                                <div className="space-y-4">
+                                  <div className="space-y-1.5">
+                                    <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Número do Cartão</label>
+                                    <div className="relative">
+                                      <input 
+                                        value={cardNumber} 
+                                        onChange={(e) => setCardNumber(e.target.value)}
+                                        className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl pl-12 pr-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                                        placeholder="0000 0000 0000 0000"
+                                      />
+                                      <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-subtle" />
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="space-y-1.5">
+                                    <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Nome no Cartão</label>
+                                    <input 
+                                      value={cardHolder} 
+                                      onChange={(e) => setCardHolder(e.target.value)}
+                                      className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                                      placeholder="NOME IGUAL NO CARTÃO"
+                                    />
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1.5">
+                                      <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Validade (MM/AA)</label>
+                                      <input 
+                                        value={cardExpiry} 
+                                        onChange={(e) => setCardExpiry(e.target.value)}
+                                        className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                                        placeholder="05/30"
+                                      />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                      <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">CVV</label>
+                                      <input 
+                                        value={cardCvv} 
+                                        onChange={(e) => setCardCvv(e.target.value)}
+                                        type="password"
+                                        maxLength={4}
+                                        className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                                        placeholder="***"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
 
                           {paymentMethod === 'card' && (
                             <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 flex items-center justify-between animate-in slide-in-from-top-2 duration-300">
@@ -832,8 +1017,7 @@ export default function PerfilAtleta() {
                         </div>
                       )}
                     </div>
-                  </div>
-
+                  
                   <div className="mt-auto">
                     <button 
                       onClick={handleSaveSubscription}
@@ -849,7 +1033,8 @@ export default function PerfilAtleta() {
             </div>
           </div>
         </div>
-      )}
+      </div>
+    )}
 
       {/* MODAL: NOVO DOCUMENTO */}
       {isDocumentModalOpen && (

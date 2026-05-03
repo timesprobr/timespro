@@ -20,14 +20,15 @@ serve(async (req) => {
     const amount = Number.parseInt(String(data.amountCentavos)) || 1000;
     const method = String(data.method || 'PIX').toUpperCase();
     const isPix = method === 'PIX';
+    const isCard = method === 'CARD';
     
     let endpoint = '';
     let payload = {};
 
-    if (isPix) {
+    if (isPix || (isCard && data.card)) {
       endpoint = '/transparents/create';
       payload = {
-        method: 'PIX',
+        method: isPix ? 'PIX' : 'CARD',
         data: {
           amount: amount,
           description: data.description || 'Assinatura TimesPro',
@@ -36,10 +37,21 @@ serve(async (req) => {
             name: data.customerName,
             email: data.customerEmail,
             taxId: data.customerTaxId,
-            cellphone: data.customerPhone
+            cellphone: data.customerPhone,
+            address: data.customerAddress
           }
         }
       };
+
+      if (isCard && data.card) {
+        // @ts-ignore
+        payload.data.card = {
+          number: data.card.number,
+          holder: data.card.holder,
+          expiry: data.card.expiry,
+          cvv: data.card.cvv
+        };
+      }
     } else {
       // Passo 1: Garantir que o produto existe no catálogo do AbacatePay v2
       // Usamos um ID baseado no valor para evitar duplicados mas permitir preços diferentes
