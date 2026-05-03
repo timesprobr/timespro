@@ -227,7 +227,8 @@ export default function Checkout() {
         customerEmail: formData.email,
         customerPhone: formData.phone,
         externalId: id,
-        method: paymentMethod?.toUpperCase() || 'PIX'
+        method: paymentMethod?.toUpperCase() || 'PIX',
+        clubeId: billingData?.organization_id || displayOrg?.id || billingData?.athletes?.organization_id
       };
 
       const { data: result, error } = await supabase.functions.invoke('create-billing', {
