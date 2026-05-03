@@ -45,7 +45,7 @@ serve(async (req) => {
       payload = {
         frequency: 'ONE_TIME',
         methods: ['CARD'],
-        products: [
+        items: [
           {
             externalId: data.externalId || 'prod_default',
             name: data.description || 'Assinatura TimesPro',
@@ -55,7 +55,6 @@ serve(async (req) => {
         ],
         returnUrl: data.returnUrl || 'https://timespro.com.br',
         completionUrl: data.completionUrl || 'https://timespro.com.br',
-        // Removido customerId para evitar erro se o ID não for cust_...
       };
     }
 
@@ -74,7 +73,6 @@ serve(async (req) => {
     console.log('AbacatePay Response:', JSON.stringify(result));
 
     if (!response.ok) {
-      // Retorna o erro detalhado para o frontend
       const errorMessage = result.error || (result.errors && result.errors[0]?.message) || `API Error: ${response.statusText}`;
       return new Response(JSON.stringify({ 
         success: false,
@@ -82,7 +80,7 @@ serve(async (req) => {
         debug: result
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200, // Mantemos 200 para o frontend tratar no objeto success
+        status: 200,
       });
     }
 
