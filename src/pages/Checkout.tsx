@@ -128,13 +128,6 @@ export default function Checkout() {
           setAmount(Number(payment.amount));
           
           if (athlete) {
-            setFormData({
-              name: athlete.full_name || '',
-              taxId: athlete.document_cpf || '',
-              email: athlete.email || '',
-              phone: athlete.whatsapp || ''
-            });
-
             const { data: org } = await supabase
               .from('organizations')
               .select('*')
@@ -427,7 +420,7 @@ export default function Checkout() {
                           value={formData.email}
                           onChange={(e) => setFormData({...formData, email: e.target.value})}
                           className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-[#A3E635] transition-all text-sm"
-                          placeholder="seu@email.com"
+                          placeholder="E-mail"
                         />
                       </div>
                     </div>
