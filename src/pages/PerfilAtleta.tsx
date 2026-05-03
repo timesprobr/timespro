@@ -53,7 +53,9 @@ const SocksIcon = ({ className }: { className?: string }) => (
 
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { useOrg } from '../context/OrgContext';
 import Toast from '../components/Toast';
+import NewAthleteForm from '../components/athletes/NewAthleteForm';
 
 interface Athlete {
   id: string;
@@ -87,27 +89,30 @@ export default function PerfilAtleta() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { organization } = useOrg();
   
   const [activeTab, setActiveTab] = useState<'geral' | 'performance' | 'financeiro'>('geral');
   const [athlete, setAthlete] = useState<Athlete | null>(null);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  
+  // Modal States
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isMembershipModalOpen, setIsMembershipModalOpen] = useState(false);
+  const [isDocumentModalOpen, setIsDocumentModalOpen] = useState(false);
+  const [memberships, setMemberships] = useState<any[]>([]);
+  const [isSavingSubscription, setIsSavingSubscription] = useState(false);
 
-  const [subscriptionData] = useState({
-    plan_name: 'Plano Master Pro',
-    value: '80,00',
-    method: 'PIX / Automático',
-    due_day: '10',
-    status: 'Ativo'
-  });
 
   useEffect(() => {
     fetchAthleteData();
   }, [id]);
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
   };
+
+  const [currentSubscription, setCurrentSubscription] = useState<any>(null);
 
   const fetchAthleteData = async () => {
     try {
@@ -115,11 +120,42 @@ export default function PerfilAtleta() {
       const { data, error } = await supabase!.from('athletes').select('*').eq('id', id).single();
       if (error) throw error;
       setAthlete(data);
+
+      // Fetch current subscription
+      const { data: subData } = await supabase!
+        .from('athlete_subscriptions')
+        .select('*, plan:membership_plans(*, membership:memberships(name))')
+        .eq('athlete_id', id)
+        .eq('status', 'active')
+        .maybeSingle();
+      
+      setCurrentSubscription(subData);
     } catch (err) {
       console.error(err);
       showToast('Erro ao carregar dados', 'error');
     } finally { setLoading(false); }
   };
+
+  const fetchMemberships = async () => {
+    if (!organization) return;
+    try {
+      const { data, error } = await supabase!
+        .from('memberships')
+        .select('*, plans:membership_plans(*)')
+        .eq('organization_id', organization.id);
+      
+      if (error) throw error;
+      setMemberships(data || []);
+    } catch (err) {
+      console.error('Error fetching memberships:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (isMembershipModalOpen) {
+      fetchMemberships();
+    }
+  }, [isMembershipModalOpen, organization]);
 
   const calculateAge = (birthDate: string) => {
     if (!birthDate) return '--';
@@ -260,7 +296,10 @@ export default function PerfilAtleta() {
                     <p className="text-[7px] font-bold text-text-subtle uppercase tracking-widest">Dossiê Completo</p>
                   </div>
                 </div>
-                <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-soft border border-border-main hover:border-primary/40 transition-all group/edit">
+                <button 
+                  onClick={() => setIsEditModalOpen(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-soft border border-border-main hover:border-primary/40 transition-all group/edit"
+                >
                   <Edit3 className="w-3 h-3 text-text-subtle group-hover/edit:text-primary" />
                   <span className="text-[9px] font-black uppercase text-text-subtle group-hover/edit:text-text-main">Editar</span>
                 </button>
@@ -323,7 +362,10 @@ export default function PerfilAtleta() {
                   <div className="px-2 py-1 bg-primary/10 border border-primary/20 rounded-full">
                     <span className="text-[8px] font-black italic text-primary-dark uppercase">Oficiais</span>
                   </div>
-                  <button className="p-1 rounded-lg bg-surface-soft border border-border-main hover:border-primary/40 transition-all group/edit">
+                  <button 
+                    onClick={() => setIsEditModalOpen(true)}
+                    className="p-1 rounded-lg bg-surface-soft border border-border-main hover:border-primary/40 transition-all group/edit"
+                  >
                     <Edit3 className="w-2.5 h-2.5 text-text-subtle group-hover/edit:text-primary" />
                   </button>
                 </div>
@@ -390,30 +432,49 @@ export default function PerfilAtleta() {
                   <CreditCard className="w-4 h-4 text-primary" />
                   <h3 className="text-[10px] font-black uppercase text-text-main tracking-widest">Mensalidade</h3>
                 </div>
-                <span className="text-[8px] font-black text-primary-dark px-2 py-1 bg-primary/10 rounded-lg uppercase">{subscriptionData.status}</span>
+                <div className="flex items-center gap-2">
+                  <span className={cn(
+                    "text-[8px] font-black px-2 py-1 rounded-lg uppercase",
+                    currentSubscription?.status === 'active' ? "bg-emerald-500/10 text-emerald-500" : "bg-primary/10 text-primary-dark"
+                  )}>
+                    {currentSubscription?.status === 'active' ? 'Ativo' : 'Pendente'}
+                  </span>
+                  <button 
+                    onClick={() => setIsMembershipModalOpen(true)}
+                    className="p-1 rounded-lg bg-surface-soft border border-border-main hover:border-primary/40 transition-all group/edit"
+                  >
+                    <Edit3 className="w-2.5 h-2.5 text-text-subtle group-hover/edit:text-primary" />
+                  </button>
+                </div>
               </div>
               
               <div className="space-y-6">
                 <div className="flex items-center justify-between border-b border-border-main pb-4">
-                  <p className="text-xs font-black italic text-text-main/80 uppercase">{subscriptionData.plan_name}</p>
-                  <p className="text-lg font-black italic text-primary-dark">R$ {subscriptionData.value}</p>
+                  <p className="text-xs font-black italic text-text-main/80 uppercase">
+                    {currentSubscription?.plan?.membership?.name} - {currentSubscription?.plan?.name || 'Sem Plano'}
+                  </p>
+                  <p className="text-lg font-black italic text-primary-dark">
+                    R$ {currentSubscription?.plan?.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
+                  </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-[7px] font-black text-text-subtle uppercase mb-1 tracking-widest">Método</p>
-                    <p className="text-[10px] font-black italic text-text-main/70 uppercase">{subscriptionData.method}</p>
+                    <p className="text-[7px] font-black text-text-subtle uppercase mb-1 tracking-widest">Frequência</p>
+                    <p className="text-[10px] font-black italic text-text-main/70 uppercase">
+                      {currentSubscription?.plan?.billing_period === 'monthly' ? 'Mensal' : 
+                       currentSubscription?.plan?.billing_period === 'quarterly' ? 'Trimestral' :
+                       currentSubscription?.plan?.billing_period === 'semiannual' ? 'Semestral' :
+                       currentSubscription?.plan?.billing_period === 'annual' ? 'Anual' : '---'}
+                    </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[7px] font-black text-text-subtle uppercase mb-1 tracking-widest">Vencimento</p>
-                    <p className="text-[10px] font-black italic text-text-main/70 uppercase">Todo dia {subscriptionData.due_day}</p>
+                    <p className="text-[7px] font-black text-text-subtle uppercase mb-1 tracking-widest">Próx. Vencimento</p>
+                    <p className="text-[10px] font-black italic text-text-main/70 uppercase">
+                      {currentSubscription?.next_billing_at ? new Date(currentSubscription.next_billing_at).toLocaleDateString('pt-BR') : '---'}
+                    </p>
                   </div>
                 </div>
               </div>
-
-              <button className="mt-8 w-full py-3 bg-surface-soft border border-border-main rounded-xl flex items-center justify-center gap-2 group/edit transition-all">
-                <Edit3 className="w-4 h-4 text-text-subtle group-hover/edit:text-primary transition-colors" />
-                <span className="text-text-muted font-black italic uppercase text-[10px] tracking-widest group-hover/edit:text-text-main transition-colors">Editar Plano</span>
-              </button>
             </div>
 
             {/* DOCUMENTOS */}
@@ -433,10 +494,13 @@ export default function PerfilAtleta() {
               </div>
 
               <div className="mt-auto pt-4 border-t border-border-main">
-                <div className="bg-primary/5 border border-primary/20 border-dashed rounded-xl p-3 flex flex-col items-center justify-center group cursor-pointer hover:bg-primary/10 text-center transition-all">
+                <button 
+                  onClick={() => setIsDocumentModalOpen(true)}
+                  className="w-full bg-primary/5 border border-primary/20 border-dashed rounded-xl p-3 flex flex-col items-center justify-center group cursor-pointer hover:bg-primary/10 text-center transition-all"
+                >
                   <Plus className="w-4 h-4 text-primary mb-1 group-hover:scale-110 transition-transform" />
                   <p className="text-[8px] font-black italic text-primary-dark uppercase tracking-widest">Novo Documento</p>
-                </div>
+                </button>
               </div>
             </div>
           </div>
@@ -445,6 +509,159 @@ export default function PerfilAtleta() {
       </div>
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={()=>setToast(null)} />}
+
+      {/* MODAL: EDITAR ATLETA */}
+      {isEditModalOpen && (
+        <NewAthleteForm 
+          onClose={() => setIsEditModalOpen(false)} 
+          onSuccess={() => {
+            fetchAthleteData();
+            setIsEditModalOpen(false);
+          }}
+          athlete={athlete}
+        />
+      )}
+
+      {/* MODAL: MENSALIDADE */}
+      {isMembershipModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="bg-[var(--surface)] w-full max-w-xl rounded-[32px] overflow-hidden shadow-2xl border border-[var(--border)] flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-[var(--border)] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 text-primary rounded-xl">
+                  <CreditCard size={20} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black uppercase tracking-widest text-[var(--text)] italic">Selecionar Mensalidade</h2>
+                  <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Atribuir plano para {athlete.full_name}</p>
+                </div>
+              </div>
+              <button onClick={() => setIsMembershipModalOpen(false)} className="p-2 hover:bg-[var(--surface-soft)] rounded-xl transition-colors">
+                <Plus size={20} className="text-[var(--text-muted)] rotate-45" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {memberships.map(membership => (
+                <div key={membership.id} className="space-y-2">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-primary ml-2">{membership.name}</h3>
+                  <div className="grid grid-cols-1 gap-2">
+                    {membership.plans?.map((plan: any) => (
+                      <button 
+                        key={plan.id}
+                        onClick={async () => {
+                          if (!organization) return;
+                          setIsSavingSubscription(true);
+                          try {
+                            const { error } = await supabase!
+                              .from('athlete_subscriptions')
+                              .upsert({
+                                organization_id: organization.id,
+                                plan_id: plan.id,
+                                athlete_id: athlete.id,
+                                next_billing_at: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString(),
+                                status: 'active'
+                              }, { onConflict: 'athlete_id' });
+                            
+                            if (error) throw error;
+                            showToast('Mensalidade atualizada com sucesso!');
+                            fetchAthleteData();
+                            setIsMembershipModalOpen(false);
+                          } catch (err: any) {
+                            showToast(err.message, 'error');
+                          } finally {
+                            setIsSavingSubscription(false);
+                          }
+                        }}
+                        disabled={isSavingSubscription}
+                        className={cn(
+                          "flex items-center justify-between p-4 rounded-2xl border transition-all text-left",
+                          currentSubscription?.plan_id === plan.id 
+                            ? "bg-primary/5 border-primary shadow-[0_0_20px_rgba(189,255,1,0.1)]" 
+                            : "bg-[var(--surface-soft)] border-[var(--border)] hover:border-primary/40"
+                        )}
+                      >
+                        <div>
+                          <p className="text-[11px] font-black uppercase italic text-[var(--text)]">{plan.name}</p>
+                          <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-widest">
+                            {plan.billing_period === 'monthly' ? 'Mensal' : 
+                             plan.billing_period === 'quarterly' ? 'Trimestral' :
+                             plan.billing_period === 'semiannual' ? 'Semestral' : 'Anual'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-black italic text-primary">R$ {plan.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                          {currentSubscription?.plan_id === plan.id && (
+                            <span className="text-[8px] font-black uppercase text-primary">Plano Atual</span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: NOVO DOCUMENTO */}
+      {isDocumentModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="bg-[var(--surface)] w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl border border-[var(--border)]">
+            <div className="p-6 border-b border-[var(--border)] flex items-center justify-between bg-[var(--surface-soft)]/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 text-primary rounded-xl">
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black uppercase tracking-widest text-[var(--text)] italic">Novo Documento</h2>
+                  <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Upload de Dossiê</p>
+                </div>
+              </div>
+              <button onClick={() => setIsDocumentModalOpen(false)} className="p-2 hover:bg-[var(--surface-soft)] rounded-xl transition-colors">
+                <Plus size={20} className="text-[var(--text-muted)] rotate-45" />
+              </button>
+            </div>
+            <form className="p-6 space-y-5" onSubmit={(e) => {
+              e.preventDefault();
+              showToast('Upload realizado com sucesso! (Demonstração)');
+              setIsDocumentModalOpen(false);
+            }}>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Título do Documento</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Atestado Médico 2024"
+                  className="w-full bg-[var(--surface-soft)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Arquivo</label>
+                <div className="relative group">
+                  <input 
+                    type="file" 
+                    className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                    required
+                  />
+                  <div className="w-full bg-[var(--surface-soft)] border-2 border-dashed border-[var(--border)] group-hover:border-primary/40 rounded-2xl p-8 flex flex-col items-center justify-center transition-all">
+                    <Plus size={24} className="text-primary/40 group-hover:text-primary mb-2 transition-colors" />
+                    <p className="text-[10px] font-black uppercase text-[var(--text-muted)]">Clique ou arraste o arquivo</p>
+                    <p className="text-[8px] font-bold text-[var(--text-muted)] opacity-40 uppercase mt-1">PDF, JPG ou PNG (Máx 5MB)</p>
+                  </div>
+                </div>
+              </div>
+              <button 
+                type="submit"
+                className="w-full py-4 bg-primary text-black rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-primary/20 mt-2"
+              >
+                Enviar Documento
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
