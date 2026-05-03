@@ -49,6 +49,7 @@ interface Athlete {
   status: 'active' | 'inactive' | 'pending';
   modality: string;
   email?: string;
+  organization_id: string;
 }
 
 const PERFORMANCE_DATA = [
@@ -128,43 +129,93 @@ export default function PerfilAtleta() {
     if (!athlete) return;
     try {
       setIsGeneratingCheckout(true);
+      const orgId = organization?.id || athlete.organization_id;
+      
+      if (!orgId) {
+        throw new Error('ID da organização não encontrado. Verifique os dados do atleta.');
+      }
+
       const billingData = {
         athlete_id: athlete.id,
-        organization_id: organization?.id || athlete.id,
+        organization_id: orgId,
         amount: parseFloat(monthlyFee),
         description: `Mensalidade - ${athlete.full_name}`,
         due_date: new Date(new Date().getFullYear(), new Date().getMonth(), parseInt(dueDate)).toISOString(),
         status: 'pending'
       };
 
-      const { data, error } = await supabase!
-        .from('athlete_billings')
-        .insert([billingData])
+      console.log('Tentando inserir cobrança no banco:', billingData);
+
+      const generateSlug = (name: string) => {
+        return name
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+          .replace(/[^a-z0-9]/g, '-')     // Remove caracteres especiais
+          .replace(/-+/g, '-')             // Remove hífens duplicados
+          .replace(/^-|-$/g, '');          // Remove hífens no início/fim
+      };
+
+      const athleteSlug = generateSlug(athlete.full_name);
+      const targetOrgId = athlete.organization_id || organization?.id;
+      
+      // 1. Buscar a assinatura ativa do atleta
+      const { data: subscription, error: subError } = await supabase!
+        .from('athlete_subscriptions')
+        .select('id, plan_id')
+        .eq('athlete_id', athlete.id)
+        .eq('status', 'active')
+        .single();
+
+      if (subError || !subscription) {
+        console.error('Atleta sem assinatura ativa:', subError);
+        // Se não tiver assinatura, usamos o fallback do payload base64
+        const compactPayload = { at: athlete.id, am: parseFloat(monthlyFee) };
+        const payload = btoa(unescape(encodeURIComponent(JSON.stringify(compactPayload))));
+        const checkoutUrl = `${window.location.origin}/checkout/${athleteSlug}/f_${payload}`;
+        const message = `Olá! Segue o link para o pagamento:\n\n${checkoutUrl}`;
+        window.open(`https://wa.me/${athlete.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
+        return;
+      }
+
+      // 2. Criar o registro na sua tabela oficial de pagamentos
+      const { data: payment, error: dbError } = await supabase!
+        .from('subscription_payments')
+        .insert([{
+          subscription_id: subscription.id,
+          organization_id: targetOrgId,
+          amount: parseFloat(monthlyFee),
+          due_date: new Date(new Date().getFullYear(), new Date().getMonth(), parseInt(dueDate)).toISOString().split('T')[0],
+          status: 'pending'
+        }])
         .select()
         .single();
 
       let checkoutUrl = '';
-      if (error) {
-        const payloadData = {
-          ...billingData,
-          athlete_name: athlete.full_name,
-          org_name: organization?.name || 'Clube Parceiro',
-          org_logo: organization?.logo_url,
-          amount: parseFloat(monthlyFee)
-        };
-        // Codificação segura para UTF-8 no navegador
-        const payload = btoa(encodeURIComponent(JSON.stringify(payloadData)));
-        checkoutUrl = `${window.location.origin}/checkout/f_${payload}`;
+      
+      if (!dbError && payment) {
+        // Link curto usando o ID do pagamento
+        checkoutUrl = `${window.location.origin}/checkout/${athleteSlug}/${payment.id}`;
       } else {
-        checkoutUrl = `${window.location.origin}/checkout/${data.id}`;
+        // OPÇÃO B: Fallback com payload compactado (se o banco falhar)
+        console.error('ERRO SUPABASE (Inserção falhou):', dbError);
+        console.warn('Usando modo fallback devido ao erro acima.');
+        
+        const compactPayload = {
+          at: athlete.id,
+          am: parseFloat(monthlyFee)
+        };
+        
+        const payload = btoa(unescape(encodeURIComponent(JSON.stringify(compactPayload))));
+        checkoutUrl = `${window.location.origin}/checkout/${athleteSlug}/f_${payload}`;
       }
 
       const message = `Olá! Segue o link para o pagamento da mensalidade do atleta ${athlete.full_name}:\n\n${checkoutUrl}`;
       const whatsappUrl = `https://wa.me/${athlete.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
       window.open(whatsappUrl, '_blank');
-      showToast('Link de checkout gerado!', 'success');
+      showToast(!dbError ? 'Link de checkout gerado!' : 'Link gerado (Modo Offline)', !dbError ? 'success' : 'info');
     } catch (err) {
-      console.error('Error:', err);
+      console.error('Error geral ao gerar checkout:', err);
       showToast('Erro ao gerar link', 'error');
     } finally {
       setIsGeneratingCheckout(false);

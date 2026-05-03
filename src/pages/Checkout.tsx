@@ -1,225 +1,216 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  CreditCard, 
   ShieldCheck, 
-  Lock, 
-  ArrowRight, 
-  Copy, 
+  CreditCard, 
+  Smartphone, 
+  ArrowLeft, 
+  Info, 
   CheckCircle2, 
-  Clock,
-  ArrowLeft,
-  Smartphone,
-  Info,
-  Wallet
+  Copy, 
+  Wallet,
+  Clock
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useOrg } from '../context/OrgContext';
-import { useParams } from 'react-router-dom';
 
-const Checkout: React.FC = () => {
+interface BillingData {
+  id?: string;
+  description: string;
+  amount: number;
+  athlete_id?: string;
+  organization_id?: string;
+  athletes?: {
+    full_name: string;
+    document_cpf: string;
+    email: string;
+    whatsapp: string;
+    organization_id: string;
+  };
+}
+
+export default function Checkout() {
+  const { slug, id } = useParams();
+  const navigate = useNavigate();
   const { organization } = useOrg();
-  const { id } = useParams();
-  const [billingData, setBillingData] = useState<any>(null);
-  const [amount, setAmount] = useState<number>(49.90);
-  const [organizationOverride, setOrganizationOverride] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [billingData, setBillingData] = useState<BillingData | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | null>(null);
-  const [pixData, setPixData] = useState<any>(null);
-  const [timeLeft, setTimeLeft] = useState(1800); // 30 minutes
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-
-  const displayOrg = organization || organizationOverride;
-  
-  // Form State
+  const [amount, setAmount] = useState(0);
+  const [displayOrg, setDisplayOrg] = useState<any>(null);
+  const [pixData, setPixData] = useState<{ qrcode: string; code: string; url?: string } | null>(null);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [step, setStep] = useState(1); // 1: Personal Data, 2: Payment Details (for Card)
   const [formData, setFormData] = useState({
     name: '',
     taxId: '',
     email: '',
     phone: ''
   });
-
-  const [cardData, setCardData] = useState({ 
-    number: '', 
-    expiry: '', 
-    cvv: '', 
-    name: '' 
+  const [cardData, setCardData] = useState({
+    number: '',
+    expiry: '',
+    cvv: '',
+    name: ''
   });
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
   useEffect(() => {
-    const loadCheckoutData = async () => {
-      if (!id) return;
+    loadCheckoutData();
+  }, [id, slug]);
 
-      try {
-        setLoading(true);
-        
-        // 1. Verificar se é um payload de fallback (f_)
-        if (id.startsWith('f_')) {
-          console.log('Detectado payload de fallback:', id);
-          const payloadBase64 = id.substring(2);
-          // Decodificação segura para UTF-8
-          const decodedData = JSON.parse(decodeURIComponent(atob(payloadBase64)));
-          console.log('Dados decodificados:', decodedData);
+  const loadCheckoutData = async () => {
+    try {
+      setLoading(true);
+      
+      // 1. Decodificar Payload Base64 (Legacy/Fallback)
+      if (id?.startsWith('f_')) {
+        try {
+          const base64 = id.substring(2);
+          const decoded = JSON.parse(atob(base64));
           
-          setBillingData(decodedData);
-          setAmount(decodedData.amount || 80.00);
-          setOrganizationOverride({
-            name: decodedData.org_name || 'Clube Parceiro',
-            logo_url: decodedData.org_logo
+          setBillingData({
+            description: decoded.ds || 'Mensalidade',
+            amount: decoded.am,
+            athlete_id: decoded.at,
+            organization_id: decoded.og
           });
-          
-          if (decodedData.athlete_name) {
-            setFormData(prev => ({ ...prev, name: decodedData.athlete_name }));
-          }
-        } 
-        // 2. Se for um UUID, buscar no banco
-        else {
-          const { data: billing, error: billingError } = await supabase!
-            .from('athlete_billings')
-            .select('*, athletes(full_name, cpf, email, whatsapp, organization_id)')
-            .eq('id', id)
-            .single();
+          setAmount(decoded.am);
 
-          if (billingError) throw billingError;
-
-          if (billing) {
-            setBillingData(billing);
-            setAmount(billing.amount);
-            
-            // Preencher form com dados do atleta se disponíveis
-            if (billing.athletes) {
-              setFormData({
-                name: billing.athletes.full_name || '',
-                taxId: billing.athletes.cpf || '',
-                email: billing.athletes.email || '',
-                phone: billing.athletes.whatsapp || ''
-              });
-            }
-
-            // Buscar organização
-            const { data: org } = await supabase!
+          // Buscar organização pelo ID do payload
+          if (decoded.og) {
+            const { data: org } = await supabase
               .from('organizations')
               .select('*')
-              .eq('id', billing.organization_id)
+              .eq('id', decoded.og)
+              .single();
+            if (org) setDisplayOrg(org);
+          }
+        } catch (e) {
+          console.error('Erro ao decodificar payload:', e);
+        }
+      } 
+      // 2. Buscar no banco (Novo padrão UUID)
+      else {
+        const { data: payment, error: paymentError } = await supabase
+          .from('subscription_payments')
+          .select(`
+            *,
+            athlete_subscriptions!inner (
+              id,
+              athletes (
+                full_name,
+                document_cpf,
+                email,
+                whatsapp,
+                organization_id
+              ),
+              membership_plans (
+                name
+              )
+            )
+          `)
+          .eq('id', id)
+          .single();
+
+        if (paymentError) throw paymentError;
+
+        if (payment) {
+          const subscription = payment.athlete_subscriptions;
+          const athlete = subscription.athletes;
+          const plan = subscription.membership_plans;
+
+          setBillingData({
+            ...payment,
+            description: plan?.name || 'Mensalidade - Atleta',
+            athletes: athlete
+          });
+          
+          setAmount(Number(payment.amount));
+          
+          if (athlete) {
+            setFormData({
+              name: athlete.full_name || '',
+              taxId: athlete.document_cpf || '',
+              email: athlete.email || '',
+              phone: athlete.whatsapp || ''
+            });
+
+            const { data: org } = await supabase
+              .from('organizations')
+              .select('*')
+              .eq('id', payment.organization_id || athlete.organization_id)
               .single();
             
-            if (org) setOrganizationOverride(org);
+            if (org) setDisplayOrg(org);
           }
         }
-      } catch (err) {
-        console.error('Erro ao carregar dados do checkout:', err);
-        showToast('Não foi possível carregar as informações da cobrança', 'error');
-      } finally {
-        setLoading(false);
       }
-    };
-
-    loadCheckoutData();
-  }, [id]);
-
-  useEffect(() => {
-    if (pixData && timeLeft > 0) {
-      const timer = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
-      }, 1000);
-      return () => clearInterval(timer);
+    } catch (err) {
+      console.error('Erro ao carregar checkout:', err);
+    } finally {
+      setLoading(false);
     }
-  }, [pixData, timeLeft]);
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const formatCPF = (value: string) => {
-    const v = value.replace(/\D/g, '').substring(0, 11);
-    if (v.length <= 3) return v;
-    if (v.length <= 6) return `${v.substring(0, 3)}.${v.substring(3)}`;
-    if (v.length <= 9) return `${v.substring(0, 3)}.${v.substring(3, 6)}.${v.substring(6)}`;
-    return `${v.substring(0, 3)}.${v.substring(3, 6)}.${v.substring(6, 9)}-${v.substring(9)}`;
+    return value
+      .replace(/\D/g, '')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+      .replace(/(-\d{2})\d+?$/, '$1');
   };
 
   const formatPhone = (value: string) => {
-    const v = value.replace(/\D/g, '').substring(0, 11);
-    if (v.length <= 2) return v;
-    if (v.length <= 7) return `(${v.substring(0, 2)}) ${v.substring(2)}`;
-    return `(${v.substring(0, 2)}) ${v.substring(2, 7)}-${v.substring(7)}`;
+    return value
+      .replace(/\D/g, '')
+      .replace(/(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{5})(\d)/, '$1-$2')
+      .replace(/(-\d{4})\d+?$/, '$1');
   };
 
   const formatCardNumber = (value: string) => {
-    const v = value.replace(/\D/g, '').substring(0, 16);
-    return v.replace(/(\d{4})(?=\d)/g, '$1 ');
+    return value.replace(/\D/g, '').replace(/(\d{4})/g, '$1 ').trim().substring(0, 19);
   };
 
   const formatExpiry = (value: string) => {
-    const v = value.replace(/\D/g, '').substring(0, 4);
-    if (v.length >= 3) return `${v.substring(0, 2)}/${v.substring(2)}`;
-    return v;
+    return value.replace(/\D/g, '').replace(/(\d{2})(\d)/, '$1/$2').substring(0, 5);
   };
 
-  const formatCVV = (value: string) => value.replace(/\D/g, '').substring(0, 4);
-
-  const copyToClipboard = () => {
-    if (pixData?.code) {
-      navigator.clipboard.writeText(pixData.code);
-      showToast('Código copiado!', 'success');
-    }
+  const formatCVV = (value: string) => {
+    return value.replace(/\D/g, '').substring(0, 4);
   };
 
-  const handlePayment = async (method: 'pix' | 'card') => {
+  const handlePayment = async () => {
     try {
-      // Validação básica
-      if (!formData.name || !formData.email || !formData.taxId || !formData.phone) {
-        showToast('Preencha todos os campos obrigatórios', 'error');
+      // Se for cartão e estiver no passo 1, avança para o passo 2
+      if (paymentMethod === 'card' && step === 1) {
+        setStep(2);
         return;
       }
 
       setLoading(true);
-      setPaymentMethod(method);
-
-      if (!supabase) throw new Error('Supabase não configurado');
-
-      const productId = import.meta.env.VITE_ABACATEPAY_PRODUTO_MENSAL_AVULSO_ID;
-
-      console.log('Iniciando pagamento:', { method, amount, productId });
+      
+      const payload = {
+        amountCentavos: Math.round(amount * 100),
+        description: billingData?.description || 'Mensalidade TimesPro',
+        customerName: formData.name,
+        customerTaxId: formData.taxId,
+        customerEmail: formData.email,
+        customerPhone: formData.phone,
+        externalId: id,
+        method: paymentMethod?.toUpperCase() || 'PIX'
+      };
 
       const { data: result, error } = await supabase.functions.invoke('create-billing', {
-        body: {
-          amountCentavos: Math.round(amount * 100),
-          description: billingData?.description || 'Assinatura TimesPro - Plano Profissional',
-          customerName: formData.name,
-          customerEmail: formData.email,
-          customerTaxId: formData.taxId.replace(/\D/g, ''),
-          customerPhone: formData.phone.replace(/\D/g, ''),
-          productId: productId,
-          externalId: id?.startsWith('f_') ? (window.crypto?.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).substring(2)) : id,
-          returnUrl: window.location.href,
-          completionUrl: `${window.location.origin}/dashboard?success=true`,
-          methods: method === 'pix' ? ['PIX'] : ['CREDIT_CARD']
-        }
+        body: payload
       });
 
-      if (error) {
-        console.error('Erro na chamada da Function:', error);
-        throw error;
-      }
-      
-      console.log('Resposta bruta da Function:', result);
-      
-      // AbacatePay v2 pode retornar { data: { billing: ... } } ou { billing: ... } ou direto o objeto
+      if (error) throw error;
+
       const data = result?.data?.billing || result?.data || result?.billing || result;
-      console.log('Dados processados para UI:', data);
 
-      if (data?.error || result?.error) {
-        throw new Error(data?.error || result?.error);
-      }
-
-      if (method === 'pix') {
+      if (paymentMethod === 'pix') {
         if (data?.pix) {
           setPixData({
             qrcode: data.pix.qrcode,
@@ -227,27 +218,24 @@ const Checkout: React.FC = () => {
             url: data.url || result.url || data.pix.url
           });
           setTimeLeft(1800);
-          showToast('Código PIX gerado com sucesso!');
-        } else if (data?.url || result?.url) {
-          // Fallback para URL de checkout se não houver dados transparentes
-          window.location.href = data?.url || result?.url;
-        } else {
-          console.error('Dados do PIX ausentes na resposta:', data);
-          throw new Error('A API não retornou os dados do PIX. Verifique os logs.');
+        } else if (data?.url) {
+          window.location.href = data.url;
         }
-      } else if (data?.url || result?.url) {
-        window.location.href = data?.url || result?.url;
       } else if (data?.url) {
-        // Fallback para qualquer URL retornada
         window.location.href = data.url;
-      } else {
-        throw new Error('Não foi possível gerar o link de pagamento.');
       }
     } catch (err: any) {
-      console.error('Erro detalhado no pagamento:', err);
-      showToast(err.message || 'Erro ao processar pagamento', 'error');
+      console.error('Erro no pagamento:', err);
+      alert(err.message || 'Erro ao processar pagamento');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const copyPixCode = () => {
+    if (pixData?.code) {
+      navigator.clipboard.writeText(pixData.code);
+      alert('Código PIX copiado!');
     }
   };
 
@@ -256,22 +244,21 @@ const Checkout: React.FC = () => {
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center">
         <div className="w-16 h-16 border-4 border-[#A3E635]/20 border-t-[#A3E635] rounded-full animate-spin mb-6" />
         <h2 className="text-xl font-bold text-[#0F172A]">Carregando checkout...</h2>
-        <p className="text-slate-500 mt-2">Estamos preparando seu ambiente de pagamento seguro.</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white font-sans text-[#1A1A1A] pb-20 selection:bg-[#A3E635]/30 overflow-x-hidden">
-      {/* Header Minimalista e Seguro */}
-      <header className="py-6 px-6 bg-white sticky top-0 z-50">
-        <div className="max-w-xl mx-auto flex items-center justify-between">
+    <div className="min-h-screen bg-white font-sans text-[#1A1A1A] pb-20 overflow-x-hidden">
+      {/* Header */}
+      <header className="py-6 px-6 bg-white sticky top-0 z-50 border-b border-slate-50">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
              <button onClick={() => window.history.back()} className="p-2 -ml-2 hover:bg-slate-50 rounded-full transition-colors">
                <ArrowLeft className="w-5 h-5 text-slate-400" />
              </button>
              <div className="flex flex-col">
-               <span className="font-display font-extrabold text-[18px] leading-tight text-slate-900 tracking-tight">Checkout</span>
+               <span className="font-bold text-lg text-slate-900 tracking-tight">Checkout</span>
                <div className="flex items-center gap-1.5">
                  <div className="w-1.5 h-1.5 bg-[#A3E635] rounded-full animate-pulse"></div>
                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ambiente Seguro</span>
@@ -279,361 +266,300 @@ const Checkout: React.FC = () => {
              </div>
           </div>
           {displayOrg?.logo_url && (
-            <img src={displayOrg.logo_url} alt={displayOrg.name} className="w-10 h-10 rounded-full object-cover border-2 border-slate-50 shadow-sm" />
+            <img src={displayOrg.logo_url} alt={displayOrg.name} className="w-10 h-10 rounded-full object-cover border-2 border-slate-50" />
           )}
         </div>
       </header>
 
-      <main className="max-w-xl mx-auto px-6">
-        {!pixData ? (
-          <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-1000 ease-out">
-            
-            {/* Premium Summary Card - Estilo Wallet Modern com Degradê */}
-            <div className="relative">
-              <div className="bg-gradient-to-br from-[#0D0D0D] via-[#1A1A1A] to-[#0D0D0D] rounded-[32px] p-8 text-white shadow-2xl overflow-hidden border border-white/5 relative">
-                {/* Visual Elements */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-[#A3E635]/5 blur-[60px] rounded-full -translate-y-1/2 translate-x-1/2" />
-                <Wallet className="absolute -right-6 top-1/2 -translate-y-1/2 w-48 h-48 text-white/[0.02] -rotate-12 pointer-events-none" />
+      <main className="max-w-6xl mx-auto px-6 py-10">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-start">
+          
+          {/* Coluna Esquerda: Branding e Resumo (Sempre visível) */}
+          <div className="space-y-8 lg:sticky lg:top-32">
+            <div className="flex items-center gap-4 mb-6 lg:mb-10">
+              {displayOrg?.logo_url && (
+                <img src={displayOrg.logo_url} alt={displayOrg.name} className="w-16 h-16 lg:w-20 lg:h-20 rounded-2xl object-cover shadow-xl border border-slate-100" />
+              )}
+              <div className="space-y-1">
+                <h1 className="font-black text-2xl lg:text-3xl text-slate-900 tracking-tight leading-none uppercase italic">
+                  {displayOrg?.name || 'Clube'}
+                </h1>
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-[#A3E635]" />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pagamento Verificado</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Premium Summary Card */}
+            <div className="relative group">
+              <div className="bg-gradient-to-br from-[#1C1C1C] via-[#2D2D2D] to-[#1C1C1C] rounded-[32px] p-8 text-white shadow-2xl overflow-hidden border border-white/10 relative transition-all duration-500">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-[#A3E635]/5 blur-[80px] rounded-full -translate-y-1/2 translate-x-1/2" />
+                <CreditCard className="absolute -right-8 -bottom-8 w-64 h-64 text-white/[0.03] -rotate-12 pointer-events-none" />
                 
                 <div className="relative z-10 space-y-8">
-                  <div className="flex justify-between items-start">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-[#A3E635] shadow-[0_0_8px_#A3E635]"></div>
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Resumo do Plano</span>
-                      </div>
-                      <h3 className="font-display font-black text-[24px] text-white leading-tight tracking-tight">
-                        {billingData?.description || 'Mensalidade - Atleta'}
-                      </h3>
-                      <div className="flex items-center gap-2">
-                         <p className="text-[12px] text-[#A3E635] font-black uppercase tracking-[0.2em]">
-                           {displayOrg?.name || 'Racing FC'}
-                         </p>
-                      </div>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-2.5 h-2.5 rounded-full bg-[#A3E635]"></div>
+                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">Resumo do Atleta</span>
                     </div>
-                    <div className="bg-white/5 p-3 rounded-2xl border border-white/10 backdrop-blur-md">
-                      <CreditCard className="w-6 h-6 text-[#A3E635]" />
-                    </div>
-                  </div>
-
-                  <div className="pt-6 border-t border-white/10 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full border border-white/5 backdrop-blur-sm">
-                      <ShieldCheck className="w-3.5 h-3.5 text-[#A3E635]" />
-                      <span className="text-[9px] font-black text-white/50 uppercase tracking-widest leading-none">Pagamento Seguro</span>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-1">Total a Pagar</p>
-                      <div className="text-[32px] font-black text-white tracking-tighter whitespace-nowrap leading-none">
-                        R$ {amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Method Selector */}
-            <div className="space-y-6">
-              <div className="flex flex-col items-center gap-4">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">Selecione o método de pagamento</p>
-                <div className="flex items-center gap-1.5 bg-slate-100/80 p-1.5 rounded-[24px] border border-slate-200/50 w-full max-w-[340px] shadow-inner">
-                  <button
-                    onClick={() => setPaymentMethod('pix')}
-                    className={`flex-1 py-4 px-6 rounded-[20px] font-black text-[13px] transition-all flex items-center justify-center gap-3 ${
-                      paymentMethod === 'pix' 
-                        ? 'bg-white text-slate-900 shadow-xl shadow-slate-200/50 scale-[1.02] border border-slate-100' 
-                        : 'text-slate-400 hover:text-slate-600'
-                    }`}
-                  >
-                    <Smartphone className={`w-4 h-4 ${paymentMethod === 'pix' ? 'text-[#A3E635]' : ''}`} />
-                    PIX
-                  </button>
-                  <button
-                    onClick={() => setPaymentMethod('card')}
-                    className={`flex-1 py-4 px-6 rounded-[20px] font-black text-[13px] transition-all flex items-center justify-center gap-3 ${
-                      paymentMethod === 'card' 
-                        ? 'bg-white text-slate-900 shadow-xl shadow-slate-200/50 scale-[1.02] border border-slate-100' 
-                        : 'text-slate-400 hover:text-slate-600'
-                    }`}
-                  >
-                    <CreditCard className={`w-4 h-4 ${paymentMethod === 'card' ? 'text-[#A3E635]' : ''}`} />
-                    CARTÃO
-                  </button>
-                </div>
-              </div>
-
-              {/* Form Content */}
-              <div className="pt-2">
-                {!paymentMethod ? (
-                  <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-[32px] p-12 text-center space-y-4">
-                    <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm">
-                      <Smartphone className="w-8 h-8 text-slate-300" />
-                    </div>
+                    
                     <div className="space-y-1">
-                      <p className="font-bold text-slate-900">Aguardando seleção</p>
-                      <p className="text-sm text-slate-400">Escolha PIX ou Cartão para continuar</p>
+                      <p className="text-slate-400 text-sm font-medium">Atleta</p>
+                      <h3 className="font-black text-2xl text-white tracking-tight uppercase italic">
+                        {formData.name || billingData?.athletes?.full_name || 'Atleta'}
+                      </h3>
+                    </div>
+
+                    <div className="pt-4 space-y-1">
+                      <p className="text-slate-400 text-sm font-medium">Referente a</p>
+                      <h4 className="font-bold text-lg text-[#A3E635]">
+                        {billingData?.description || 'Mensalidade'}
+                      </h4>
                     </div>
                   </div>
-                ) : (
-                  <div className="space-y-10 animate-in fade-in slide-in-from-top-4 duration-500">
-                    {/* Personal Information */}
-                    <div className="space-y-6">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-[#A3E635]/10 rounded-lg flex items-center justify-center">
-                          <Info className="w-4 h-4 text-[#A3E635]" />
-                        </div>
-                        <h2 className="text-[18px] font-extrabold text-slate-900 tracking-tight">Seus Dados</h2>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 gap-5">
-                        <div className="space-y-2">
-                          <label className="text-[11px] font-bold text-slate-400 ml-1 uppercase tracking-wider">Nome Completo</label>
-                          <input 
-                            type="text" 
-                            placeholder="Ex: João Silva" 
-                            value={formData.name}
-                            onChange={(e) => setFormData({...formData, name: e.target.value})}
-                            className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-[16px] focus:outline-none focus:border-[#A3E635] focus:ring-4 focus:ring-[#A3E635]/5 focus:bg-white transition-all"
-                          />
-                        </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                          <div className="space-y-2">
-                            <label className="text-[11px] font-bold text-slate-400 ml-1 uppercase tracking-wider">CPF</label>
-                            <input 
-                              type="text" 
-                              placeholder="000.000.000-00" 
-                              value={formData.taxId}
-                              onChange={(e) => setFormData({...formData, taxId: formatCPF(e.target.value)})}
-                              className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-[16px] focus:outline-none focus:border-[#A3E635] focus:ring-4 focus:ring-[#A3E635]/5 focus:bg-white transition-all"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[11px] font-bold text-slate-400 ml-1 uppercase tracking-wider">Celular</label>
-                            <input 
-                              type="text" 
-                              placeholder="(00) 00000-0000" 
-                              value={formData.phone}
-                              onChange={(e) => setFormData({...formData, phone: formatPhone(e.target.value)})}
-                              className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-[16px] focus:outline-none focus:border-[#A3E635] focus:ring-4 focus:ring-[#A3E635]/5 focus:bg-white transition-all"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="text-[11px] font-bold text-slate-400 ml-1 uppercase tracking-wider">E-mail</label>
-                          <input 
-                            type="email" 
-                            placeholder="seu@email.com" 
-                            value={formData.email}
-                            onChange={(e) => setFormData({...formData, email: e.target.value})}
-                            className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-[16px] focus:outline-none focus:border-[#A3E635] focus:ring-4 focus:ring-[#A3E635]/5 focus:bg-white transition-all"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Credit Card Section */}
-                    {paymentMethod === 'card' && (
-                      <div className="space-y-6 pt-4 animate-in slide-in-from-right-4 duration-500">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-blue-500/10 rounded-lg flex items-center justify-center">
-                            <CreditCard className="w-4 h-4 text-blue-500" />
-                          </div>
-                          <h2 className="text-[18px] font-extrabold text-slate-900 tracking-tight">Dados do Cartão</h2>
-                        </div>
-                        
-                        <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 space-y-5">
-                          <div className="space-y-2">
-                            <label className="text-[11px] font-bold text-slate-400 ml-1 uppercase tracking-wider">Número do Cartão</label>
-                            <div className="relative">
-                              <input 
-                                type="text" 
-                                placeholder="0000 0000 0000 0000" 
-                                value={cardData.number}
-                                onChange={(e) => setCardData({...cardData, number: formatCardNumber(e.target.value)})}
-                                className="w-full px-5 py-4 bg-white border border-slate-200 rounded-2xl text-[16px] focus:outline-none focus:border-[#A3E635] transition-all"
-                              />
-                              <div className="absolute right-4 top-1/2 -translate-y-1/2 flex gap-1 opacity-50">
-                                <div className="w-7 h-4 bg-slate-200 rounded-sm"></div>
-                                <div className="w-7 h-4 bg-slate-200 rounded-sm"></div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-5">
-                            <div className="space-y-2">
-                              <label className="text-[11px] font-bold text-slate-400 ml-1 uppercase tracking-wider">Validade</label>
-                              <input 
-                                type="text" 
-                                placeholder="MM/AA" 
-                                value={cardData.expiry}
-                                onChange={(e) => setCardData({...cardData, expiry: formatExpiry(e.target.value)})}
-                                className="w-full px-5 py-4 bg-white border border-slate-200 rounded-2xl text-[16px] focus:outline-none focus:border-[#A3E635] transition-all"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-[11px] font-bold text-slate-400 ml-1 uppercase tracking-wider">CVV</label>
-                              <input 
-                                type="text" 
-                                placeholder="123" 
-                                value={cardData.cvv}
-                                onChange={(e) => setCardData({...cardData, cvv: formatCVV(e.target.value)})}
-                                className="w-full px-5 py-4 bg-white border border-slate-200 rounded-2xl text-[16px] focus:outline-none focus:border-[#A3E635] transition-all"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="space-y-2">
-                            <label className="text-[11px] font-bold text-slate-400 ml-1 uppercase tracking-wider">Nome no Cartão</label>
-                            <input 
-                              type="text" 
-                              placeholder="COMO IMPRESSO" 
-                              value={cardData.name}
-                              onChange={(e) => setCardData({...cardData, name: e.target.value.toUpperCase()})}
-                              className="w-full px-5 py-4 bg-white border border-slate-200 rounded-2xl text-[16px] focus:outline-none focus:border-[#A3E635] transition-all uppercase"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Submit Button */}
-                    <div className="pt-6 pb-12 space-y-6">
-                      <button 
-                        onClick={() => handlePayment(paymentMethod)}
-                        disabled={loading}
-                        className="w-full py-5 bg-[#A3E635] hover:bg-[#94D12D] text-[#0F172A] rounded-[24px] font-black text-[18px] flex items-center justify-center gap-3 transition-all active:scale-[0.98] disabled:opacity-50 shadow-xl shadow-[#A3E635]/20 group"
-                      >
-                        {loading ? (
-                          <div className="w-6 h-6 border-3 border-black/20 border-t-black rounded-full animate-spin" />
-                        ) : (
-                          <>
-                            <span>{paymentMethod === 'pix' ? 'Gerar Código PIX' : 'Pagar Agora'}</span>
-                            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                          </>
-                        )}
-                      </button>
-
-                      <div className="flex flex-col items-center gap-6">
-                        <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-full border border-slate-100">
-                          <Lock className="w-3.5 h-3.5 text-[#A3E635]" />
-                          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Tecnologia AbacatePay • SSL 256 bits</span>
-                        </div>
-                        <div className="flex items-center gap-8 opacity-20 grayscale hover:opacity-100 hover:grayscale-0 transition-all duration-700">
-                          <img src="https://logodownload.org/wp-content/uploads/2020/02/pix-bc-logo.png" alt="PIX" className="h-4" />
-                          <img src="https://logodownload.org/wp-content/uploads/2014/10/visa-logo-1.png" alt="Visa" className="h-3" />
-                          <img src="https://logodownload.org/wp-content/uploads/2014/07/mastercard-logo.png" alt="Mastercard" className="h-5" />
-                        </div>
+                  <div className="pt-8 border-t border-white/10 flex items-center justify-between gap-6">
+                    <div className="text-right w-full">
+                      <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-1.5 text-left">Valor Total</p>
+                      <div className="text-[44px] lg:text-[54px] font-black text-white tracking-tighter leading-none flex items-baseline gap-2">
+                        <span className="text-[20px] text-white/40 font-bold">R$</span>
+                        {amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             </div>
-          </div>
-        ) : (
-          <div className="space-y-8 animate-in fade-in zoom-in-95 duration-700 max-w-sm mx-auto">
-            <div className="bg-white rounded-[40px] p-10 border border-slate-100 text-center space-y-8 shadow-2xl">
-              <div className="flex flex-col items-center gap-4">
-                <div className="w-20 h-20 bg-[#A3E635]/10 rounded-full flex items-center justify-center mb-1 border-4 border-[#A3E635]/5">
-                  <Smartphone className="w-10 h-10 text-[#A3E635]" />
-                </div>
+
+            <div className="hidden lg:block p-6 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="flex items-start gap-3">
+                <Info className="w-5 h-5 text-blue-500 mt-0.5" />
                 <div className="space-y-1">
-                  <h2 className="font-display font-black text-[28px] text-slate-900 tracking-tight">PIX Gerado!</h2>
-                  <p className="text-slate-500 text-[14px] font-medium leading-relaxed px-4">
-                    Escaneie o código abaixo no app do seu banco para pagar.
+                  <p className="text-sm font-bold text-slate-900">Precisa de ajuda?</p>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Se tiver alguma dúvida sobre este pagamento, entre em contato diretamente com a secretaria do {displayOrg?.name}.
                   </p>
                 </div>
               </div>
+            </div>
+          </div>
 
-              {/* QR Code Container */}
-              <div className="relative inline-block bg-white p-6 rounded-[36px] border border-slate-100 shadow-xl group">
-                <div className="absolute inset-0 bg-gradient-to-tr from-[#A3E635]/5 to-blue-500/5 rounded-[36px]"></div>
-                {pixData.qrcode && (
-                  <img 
-                    src={pixData.qrcode} 
-                    alt="PIX QR Code" 
-                    className="relative z-10 w-52 h-52 mix-blend-multiply"
-                  />
+          {/* Coluna Direita: Condicional (Formulário ou QR Code) */}
+          <div className="space-y-6">
+            {!pixData ? (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-500">
+                {/* Seletor de Método (Só mostra no Step 1) */}
+                {step === 1 && (
+                  <div className="flex flex-col items-center gap-3">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">Método de Pagamento</p>
+                    <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-[24px] border border-slate-100 w-full">
+                      <button
+                        onClick={() => setPaymentMethod('pix')}
+                        className={`flex-1 py-3 rounded-[18px] font-black text-[12px] transition-all duration-300 flex items-center justify-center gap-2 ${
+                          paymentMethod === 'pix' ? 'bg-white text-slate-900 shadow-md scale-[1.02]' : 'text-slate-400'
+                        }`}
+                      >
+                        <Smartphone className={`w-3.5 h-3.5 ${paymentMethod === 'pix' ? 'text-[#A3E635]' : ''}`} />
+                        PIX
+                      </button>
+                      <button
+                        onClick={() => setPaymentMethod('card')}
+                        className={`flex-1 py-3 rounded-[18px] font-black text-[12px] transition-all duration-300 flex items-center justify-center gap-2 ${
+                          paymentMethod === 'card' ? 'bg-white text-slate-900 shadow-md scale-[1.02]' : 'text-slate-400'
+                        }`}
+                      >
+                        <CreditCard className={`w-3.5 h-3.5 ${paymentMethod === 'card' ? 'text-[#A3E635]' : ''}`} />
+                        CARTÃO
+                      </button>
+                    </div>
+                  </div>
                 )}
-              </div>
 
-              <div className="space-y-5">
-                <div className="flex items-center justify-center gap-3 text-slate-500 font-bold text-[12px] uppercase tracking-widest bg-slate-50 py-3 rounded-2xl border border-slate-100">
-                  <Clock className="w-4 h-4 text-[#A3E635] animate-pulse" />
-                  <span>Expira em:</span>
-                  <span className="text-slate-900 tabular-nums font-black">{formatTime(timeLeft)}</span>
+                {/* Passo 1: Dados Pessoais */}
+                {step === 1 ? (
+                  <div className="space-y-5 animate-in fade-in duration-300">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 h-7 bg-[#A3E635]/10 rounded-lg flex items-center justify-center text-[#A3E635] font-bold text-xs">1</div>
+                        <h2 className="text-[16px] font-extrabold text-slate-900 tracking-tight">Dados do Pagador</h2>
+                      </div>
+                      {paymentMethod === 'card' && <span className="text-[10px] font-bold text-slate-400 uppercase">Passo 1 de 2</span>}
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Nome Completo</label>
+                        <input 
+                          type="text" 
+                          value={formData.name}
+                          onChange={(e) => setFormData({...formData, name: e.target.value})}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-[#A3E635] transition-all text-sm"
+                          placeholder="Nome como no documento"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">CPF</label>
+                          <input 
+                            type="text" 
+                            value={formData.taxId}
+                            onChange={(e) => setFormData({...formData, taxId: formatCPF(e.target.value)})}
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-[#A3E635] transition-all text-sm"
+                            placeholder="000.000.000-00"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Celular</label>
+                          <input 
+                            type="text" 
+                            value={formData.phone}
+                            onChange={(e) => setFormData({...formData, phone: formatPhone(e.target.value)})}
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-[#A3E635] transition-all text-sm"
+                            placeholder="(00) 00000-0000"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">E-mail</label>
+                        <input 
+                          type="email" 
+                          value={formData.email}
+                          onChange={(e) => setFormData({...formData, email: e.target.value})}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-[#A3E635] transition-all text-sm"
+                          placeholder="seu@email.com"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Passo 2: Dados do Cartão */
+                  <div className="space-y-5 animate-in slide-in-from-right-4 duration-300">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => setStep(1)} className="p-1 hover:bg-slate-100 rounded-full transition-colors">
+                          <ArrowLeft className="w-4 h-4 text-slate-400" />
+                        </button>
+                        <div className="w-7 h-7 bg-[#A3E635]/10 rounded-lg flex items-center justify-center text-[#A3E635] font-bold text-xs">2</div>
+                        <h2 className="text-[16px] font-extrabold text-slate-900 tracking-tight">Dados do Cartão</h2>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Passo 2 de 2</span>
+                    </div>
+
+                    <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Número do Cartão</label>
+                        <input 
+                          type="text" 
+                          placeholder="0000 0000 0000 0000"
+                          value={cardData.number}
+                          onChange={(e) => setCardData({...cardData, number: formatCardNumber(e.target.value)})}
+                          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Validade</label>
+                          <input 
+                            type="text" 
+                            placeholder="MM/AA"
+                            value={cardData.expiry}
+                            onChange={(e) => setCardData({...cardData, expiry: formatExpiry(e.target.value)})}
+                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">CVV</label>
+                          <input 
+                            type="text" 
+                            placeholder="000"
+                            value={cardData.cvv}
+                            onChange={(e) => setCardData({...cardData, cvv: formatCVV(e.target.value)})}
+                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Nome no Cartão</label>
+                        <input 
+                          type="text" 
+                          placeholder="Como impresso no cartão"
+                          value={cardData.name}
+                          onChange={(e) => setCardData({...cardData, name: e.target.value})}
+                          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm uppercase"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={handlePayment}
+                  disabled={loading || !paymentMethod}
+                  className="w-full py-4 bg-[#A3E635] text-[#0F172A] rounded-[20px] font-black text-base shadow-xl shadow-[#A3E635]/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 mt-4"
+                >
+                  {loading ? (
+                    <div className="w-5 h-5 border-2 border-[#0F172A]/20 border-t-[#0F172A] rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-5 h-5" />
+                      {paymentMethod === 'card' && step === 1 ? 'PRÓXIMO PASSO' : 'FINALIZAR PAGAMENTO'}
+                    </>
+                  )}
+                </button>
+
+                {/* Segurança e Rodapé Compacto */}
+                <div className="pt-6 space-y-4">
+                  <div className="flex items-center gap-4 p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
+                    <ShieldCheck className="w-8 h-8 text-[#A3E635]" />
+                    <div className="space-y-0.5">
+                      <p className="text-[11px] font-black text-slate-900 uppercase tracking-tight">Segurança Total</p>
+                      <p className="text-[10px] text-slate-500 leading-tight">Dados protegidos por criptografia de ponta.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between px-2">
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">© 2026 TimesPro</p>
+                    <div className="flex items-center gap-1">
+                      <div className="w-1 h-1 bg-[#A3E635] rounded-full"></div>
+                      <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Sistema Oficial</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Tela de Sucesso / QR Code (Já otimizada) */
+              <div className="bg-white rounded-[32px] p-8 border border-slate-100 shadow-2xl space-y-6 animate-in zoom-in-95 duration-500">
+                <div className="text-center space-y-2">
+                  <div className="w-12 h-12 bg-[#A3E635]/10 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <Smartphone className="w-6 h-6 text-[#A3E635]" />
+                  </div>
+                  <h2 className="text-xl font-black text-slate-900 italic uppercase">PIX Gerado!</h2>
+                  <p className="text-xs text-slate-500">Escaneie o código abaixo para pagar</p>
+                </div>
+
+                <div className="p-3 bg-white border-2 border-slate-50 rounded-[24px] shadow-inner flex items-center justify-center">
+                  <img src={pixData.qrcode} alt="QR Code PIX" className="w-56 h-56" />
                 </div>
 
                 <div className="space-y-3">
-                   <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest text-center">Pix Copia e Cola</p>
-                   <button 
-                    onClick={copyToClipboard}
-                    className="w-full p-2 bg-[#0F172A] text-white rounded-2xl flex items-center justify-between group active:scale-95 transition-all shadow-xl shadow-slate-900/20"
+                  <button
+                    onClick={copyPixCode}
+                    className="w-full py-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-100 transition-all"
                   >
-                    <span className="text-[13px] font-medium truncate px-4 opacity-40 font-mono">
-                      {pixData.code}
-                    </span>
-                    <div className="flex items-center gap-2 bg-[#A3E635] text-[#0F172A] px-5 py-3 rounded-xl text-[12px] font-black flex-shrink-0 shadow-lg shadow-[#A3E635]/20">
-                      <Copy className="w-4 h-4" />
-                      COPIAR
-                    </div>
+                    <Copy className="w-4 h-4 text-slate-400" />
+                    COPIAR CÓDIGO PIX
                   </button>
+                  <div className="flex items-center justify-center gap-2 text-slate-400">
+                    <Clock className="w-3.5 h-3.5" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Aguardando pagamento...</span>
+                  </div>
                 </div>
               </div>
-
-              <button 
-                onClick={() => setPixData(null)}
-                className="text-slate-400 hover:text-slate-900 text-[13px] font-bold flex items-center justify-center gap-2 mx-auto transition-all group"
-              >
-                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                Alterar forma de pagamento
-              </button>
-            </div>
-            
-            <div className="text-center">
-              <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-                <div className="w-1.5 h-1.5 bg-[#A3E635] rounded-full animate-ping"></div>
-                Aguardando Confirmação
-              </p>
-            </div>
+            )}
           </div>
-        )}
+        </div>
       </main>
-
-      {/* Footer Minimalista */}
-      <footer className="max-w-xl mx-auto px-6 mt-12 text-center pb-12">
-        <div className="pt-8 border-t border-slate-100 space-y-4">
-          <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">
-            TimesPro • Gestão Inteligente
-          </p>
-        </div>
-      </footer>
-
-      {/* Toast Notification Premium */}
-      {toast && (
-        <div className="fixed bottom-10 left-6 right-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[100] animate-in fade-in slide-in-from-bottom-8 duration-500 cubic-bezier(0.16, 1, 0.3, 1)">
-          <div className={`px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 text-[14px] font-extrabold border ${
-            toast.type === 'success' ? 'bg-white border-[#A3E635]/20 text-slate-900' : 
-            toast.type === 'error' ? 'bg-white border-red-100 text-red-600' : 
-            'bg-[#0F172A] text-white border-white/10'
-          }`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-              toast.type === 'success' ? 'bg-[#A3E635]/10 text-[#A3E635]' : 
-              toast.type === 'error' ? 'bg-red-50 text-red-600' : 
-              'bg-white/10 text-white'
-            }`}>
-              {toast.type === 'success' && <CheckCircle2 className="w-5 h-5" />}
-              {toast.type === 'error' && <Info className="w-5 h-5" />}
-            </div>
-            {toast.message}
-          </div>
-        </div>
-      )}
+      {/* Footer original removido pois foi movido para cima */}
     </div>
   );
-};
-
-export default Checkout;
-
+}

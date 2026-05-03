@@ -40,7 +40,7 @@ export default function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/doar/:id" element={<VaquinhaPublica />} />
               <Route path="/performance/:id" element={<PublicPerformance />} />
-              <Route path="/checkout" element={<Checkout />} />
+              <Route path="/checkout/:slug/:id" element={<Checkout />} />
               <Route path="/checkout/:id" element={<Checkout />} />
 
               
