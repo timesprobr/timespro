@@ -41,16 +41,40 @@ serve(async (req) => {
         }
       };
     } else {
+      // Passo 1: Garantir que o produto existe no catálogo do AbacatePay v2
+      // Usamos um ID baseado no valor para evitar duplicados mas permitir preços diferentes
+      const productId = `timespro_plan_${amount}`;
+      
+      console.log('Garantindo produto no catálogo:', productId);
+      
+      try {
+        await fetch(`${ABACATEPAY_API_URL}/products/create`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${ABACATEPAY_API_KEY}`
+          },
+          body: JSON.stringify({
+            externalId: productId,
+            name: `Plano TimesPro - R$ ${(amount/100).toFixed(2)}`,
+            price: amount,
+            description: 'Assinatura de Atleta'
+          })
+        });
+        // Ignoramos erro de "já existe" pois o importante é ele estar lá
+      } catch (e) {
+        console.log('Produto já deve existir ou erro silenciado:', e.message);
+      }
+
+      // Passo 2: Criar o checkout usando o ID do produto
       endpoint = '/checkouts/create';
       payload = {
         frequency: 'ONE_TIME',
         methods: ['CARD'],
         items: [
           {
-            externalId: data.externalId || 'prod_default',
-            name: data.description || 'Assinatura TimesPro',
-            quantity: 1,
-            price: amount
+            id: productId, // Agora passamos o ID que registramos acima
+            quantity: 1
           }
         ],
         returnUrl: data.returnUrl || 'https://timespro.com.br',
