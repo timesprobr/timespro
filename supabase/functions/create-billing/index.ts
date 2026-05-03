@@ -26,8 +26,9 @@ serve(async (req) => {
       methods: data.methods || ['PIX'],
       items: [
         {
-          id: String(data.productId || 'prod_default'), // ID do produto cadastrado no AbacatePay
-          quantity: 1
+          id: String(data.productId || 'prod_default'),
+          quantity: 1,
+          price: finalAmount // Usar o valor dinâmico enviado
         }
       ],
       customer: {

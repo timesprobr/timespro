@@ -130,7 +130,7 @@ export default function PerfilAtleta() {
       setIsGeneratingCheckout(true);
       const billingData = {
         athlete_id: athlete.id,
-        organization_id: athlete.id,
+        organization_id: organization?.id || athlete.id,
         amount: parseFloat(monthlyFee),
         description: `Mensalidade - ${athlete.full_name}`,
         due_date: new Date(new Date().getFullYear(), new Date().getMonth(), parseInt(dueDate)).toISOString(),
@@ -149,7 +149,8 @@ export default function PerfilAtleta() {
           ...billingData,
           athlete_name: athlete.full_name,
           org_name: organization?.name || 'Clube Parceiro',
-          org_logo: organization?.logo_url
+          org_logo: organization?.logo_url,
+          amount: parseFloat(monthlyFee)
         }));
         checkoutUrl = `${window.location.origin}/checkout/f_${payload}`;
       } else {
