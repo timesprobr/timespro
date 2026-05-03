@@ -353,7 +353,19 @@ export default function Athletes() {
                   <h3 className="text-lg font-black uppercase italic tracking-tighter text-[var(--text)] group-hover:text-primary transition-colors">
                     {athlete.nickname || athlete.full_name}
                   </h3>
-                  <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase mt-1 truncate">{athlete.full_name}</p>
+                  
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {athlete.modality_id && (
+                      <span className="px-2 py-0.5 rounded bg-[var(--surface-soft)] text-[8px] font-black uppercase text-[var(--text-muted)] border border-[var(--border)]">
+                        {modalities.find(m => m.id === athlete.modality_id)?.name}
+                      </span>
+                    )}
+                    {athlete.category_id && (
+                      <span className="px-2 py-0.5 rounded bg-primary/10 text-primary-dark text-[8px] font-black uppercase border border-primary/20">
+                        {categories.find(c => c.id === athlete.category_id)?.name}
+                      </span>
+                    )}
+                  </div>
                   
                   <div className="flex items-center gap-4 mt-4 pt-4 border-t border-[var(--border)]">
                     <div className="flex items-center gap-1.5">
@@ -362,8 +374,8 @@ export default function Athletes() {
                     </div>
                     <div className="flex items-center gap-1.5 ml-auto">
                       <Clock size={10} className="text-[var(--text-muted)]" />
-                      <span className="text-[10px] font-bold text-[var(--text-muted)]">
-                        {new Date().getFullYear() - new Date(athlete.birth_date).getFullYear()} ANOS
+                      <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase">
+                        {athlete.birth_date ? `${new Date().getFullYear() - new Date(athlete.birth_date).getFullYear()} ANOS` : 'N/A'}
                       </span>
                     </div>
                   </div>

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  Calendar, 
-  Phone, 
-  FileText, 
+import {
+  ArrowLeft,
+  Calendar,
+  Phone,
+  FileText,
   TrendingUp,
   CreditCard,
   User as UserIcon,
@@ -108,12 +108,12 @@ export default function PerfilAtleta() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { organization } = useOrg();
-  
+
   const [activeTab, setActiveTab] = useState<'geral' | 'performance' | 'financeiro'>('geral');
   const [athlete, setAthlete] = useState<Athlete | null>(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  
+
   // Modal States
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isMembershipModalOpen, setIsMembershipModalOpen] = useState(false);
@@ -130,7 +130,7 @@ export default function PerfilAtleta() {
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card'>('pix');
   const [saveCard, setSaveCard] = useState(false);
   const [isFree, setIsFree] = useState(false);
-  
+
   // Novos campos para Pagador (Checkout Transparente Card)
   const [payerCpf, setPayerCpf] = useState('');
   const [payerZip, setPayerZip] = useState('');
@@ -140,7 +140,7 @@ export default function PerfilAtleta() {
   const [payerNeighborhood, setPayerNeighborhood] = useState('');
   const [payerCity, setPayerCity] = useState('');
   const [payerState, setPayerState] = useState('');
-  
+
   // Dados do Cartão
   const [cardNumber, setCardNumber] = useState('');
   const [cardHolder, setCardHolder] = useState('');
@@ -181,7 +181,7 @@ export default function PerfilAtleta() {
         .maybeSingle();
 
       if (error) throw error;
-      
+
       // Garantir que os joins sejam objetos e não arrays (comportamento comum do PostgREST em joins)
       const processedData = {
         ...data,
@@ -190,7 +190,7 @@ export default function PerfilAtleta() {
         position_data: Array.isArray(data.position_data) ? data.position_data[0] : data.position_data,
         subscription: Array.isArray(data.subscription) ? data.subscription[0] : data.subscription
       };
-      
+
       setAthlete(processedData);
 
       // Fetch current subscription
@@ -200,9 +200,9 @@ export default function PerfilAtleta() {
         .eq('athlete_id', id)
         .eq('status', 'active')
         .maybeSingle();
-      
+
       setCurrentSubscription(subData);
-      
+
       if (subData) {
         setSelectedPlanId(subData.plan_id || 'FREE');
         setPayerName(subData.payer_name || '');
@@ -249,13 +249,13 @@ export default function PerfilAtleta() {
             state: payerState
           }
         }, { onConflict: 'athlete_id' });
-      
+
       if (dbError) throw dbError;
 
       // 2. Se não for free, processar cobrança inicial via Edge Function
       if (!isFree) {
         const selectedPlan = memberships.flatMap(m => m.plans).find(p => p.id === selectedPlanId);
-        
+
         const { data: billingData, error: billingError } = await supabase!.functions.invoke('create-billing', {
           body: {
             amountCentavos: (selectedPlan?.amount || 0) * 100,
@@ -315,7 +315,7 @@ export default function PerfilAtleta() {
         .from('memberships')
         .select('*, plans:membership_plans(*)')
         .eq('organization_id', organization.id);
-      
+
       if (error) throw error;
       setMemberships(data || []);
     } catch (err) {
@@ -349,21 +349,21 @@ export default function PerfilAtleta() {
 
   return (
     <div className="min-h-screen bg-bg text-text-main pb-8 font-sans selection:bg-primary selection:text-black overflow-hidden transition-colors duration-300">
-      
+
       <div className="max-w-[1400px] mx-auto px-6 pt-6 relative z-10">
-        
+
         {/* HEADER */}
         <header className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
-            <button 
-              onClick={() => navigate(-1)} 
+            <button
+              onClick={() => navigate(-1)}
               className="p-2 rounded-xl bg-surface border border-border-main hover:border-primary/40 transition-all shadow-sm"
             >
               <ArrowLeft className="w-4 h-4 text-text-muted" />
             </button>
             <div>
               <h1 className="text-lg font-black italic uppercase tracking-tighter text-text-main leading-none">
-                {athlete.full_name} 
+                {athlete.full_name}
                 <span className="text-text-subtle text-[9px] font-bold not-italic ml-3 tracking-[0.2em] opacity-60 uppercase">PERFIL DO ATLETA</span>
               </h1>
             </div>
@@ -374,9 +374,8 @@ export default function PerfilAtleta() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-8 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all relative overflow-hidden ${
-                  activeTab === tab ? 'text-black' : 'text-text-muted hover:text-text-main'
-                }`}
+                className={`px-8 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all relative overflow-hidden ${activeTab === tab ? 'text-black' : 'text-text-muted hover:text-text-main'
+                  }`}
               >
                 {activeTab === tab && <div className="absolute inset-0 bg-primary shadow-[0_4px_12px_rgba(189,255,1,0.3)]" />}
                 <span className="relative z-10">{tab}</span>
@@ -387,7 +386,7 @@ export default function PerfilAtleta() {
 
         {/* GRID PRINCIPAL */}
         <div className="grid grid-cols-12 gap-5 items-stretch">
-          
+
           {/* COLUNA ESQUERDA - CARD DO ATLETA */}
           <div className="col-span-12 lg:col-span-3">
             <div className="bg-surface border border-border-main rounded-[32px] overflow-hidden relative group shadow-sm backdrop-blur-xl h-full flex flex-col">
@@ -399,7 +398,7 @@ export default function PerfilAtleta() {
                   <div className="w-full h-full flex items-center justify-center text-text-subtle/20"><UserIcon className="w-12 h-12" /></div>
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent opacity-80" />
-                
+
                 {/* Camisa #10 */}
                 <div className="absolute top-3 right-3 flex items-center gap-2 bg-surface/90 backdrop-blur-md px-2 py-1 rounded-lg border border-border-main shadow-sm">
                   <Shirt className="w-3 h-3 text-primary" />
@@ -421,11 +420,11 @@ export default function PerfilAtleta() {
                       )}
                     </div>
                   </div>
-                  
+
                   <div className="flex flex-wrap gap-1.5 mt-4">
                     {[
-                      athlete.position_data?.name || athlete.position, 
-                      athlete.category?.name || 'Sem Categoria', 
+                      athlete.position_data?.name || athlete.position,
+                      athlete.category?.name || 'Sem Categoria',
                       athlete.modality?.name || 'Sem Modalidade'
                     ].filter(Boolean).map((tag, i) => (
                       <span key={i} className="text-[7px] font-black uppercase bg-primary/10 border border-primary/20 text-primary-dark px-2 py-0.5 rounded-md italic tracking-tight">
@@ -457,7 +456,7 @@ export default function PerfilAtleta() {
                   </div>
                 </div>
 
-                <button 
+                <button
                   onClick={() => window.open(`https://wa.me/${athlete.whatsapp?.replace(/\D/g, '')}`, '_blank')}
                   className="w-full mt-6 py-3 bg-primary rounded-xl flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(189,255,1,0.2)] hover:scale-[1.02] transition-all group"
                 >
@@ -480,7 +479,7 @@ export default function PerfilAtleta() {
                     <p className="text-[7px] font-bold text-text-subtle uppercase tracking-widest">Dossiê Completo</p>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={() => setIsEditModalOpen(true)}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-soft border border-border-main hover:border-primary/40 transition-all group/edit shadow-sm"
                 >
@@ -488,12 +487,12 @@ export default function PerfilAtleta() {
                   <span className="text-[9px] font-black uppercase text-text-subtle group-hover/edit:text-text-main">Editar Atleta</span>
                 </button>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-x-8 gap-y-6">
                 <div className="col-span-2 flex items-center justify-between bg-surface-soft border border-border-main p-4 rounded-2xl">
                   <div className="space-y-1">
                     <p className="text-[7px] font-black uppercase text-text-subtle tracking-widest">Nome Completo</p>
-                    <p className="text-sm font-black italic text-text-main uppercase tracking-tight">{athlete.full_name}</p>
+                    <p className="text-[11px] font-black italic text-text-main uppercase tracking-tight leading-tight">{athlete.full_name}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-[7px] font-black text-text-subtle uppercase tracking-widest">Apelido</p>
@@ -503,37 +502,37 @@ export default function PerfilAtleta() {
 
                 <div className="space-y-1.5">
                   <p className="text-[7px] font-black uppercase text-text-subtle flex items-center gap-2 tracking-widest">
-                    <CalendarDays className="w-3 h-3"/> Nascimento
+                    <CalendarDays className="w-3 h-3" /> Nascimento
                   </p>
                   <div className="flex items-center gap-3">
-                    <p className="text-sm font-black italic text-text-main uppercase tracking-tighter">{athlete.birth_date ? new Date(athlete.birth_date).toLocaleDateString('pt-BR') : '---'}</p>
+                    <p className="text-[11px] font-black italic text-text-main uppercase tracking-tighter leading-tight">{athlete.birth_date ? new Date(athlete.birth_date).toLocaleDateString('pt-BR') : '---'}</p>
                     <span className="px-2 py-0.5 bg-primary/10 border border-primary/20 rounded text-[8px] font-black italic text-primary-dark">{calculateAge(athlete.birth_date)} ANOS</span>
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-1 min-h-[45px]">
                   <p className="text-[7px] font-black uppercase text-text-subtle flex items-center gap-2 tracking-widest">
-                    <MapPin className="w-3 h-3"/> Endereço
+                    <MapPin className="w-3 h-3" /> Endereço
                   </p>
-                  <p className="text-sm font-black italic text-text-main uppercase tracking-tighter truncate" title={formatAddress(athlete.address_json)}>
+                  <p className="text-[10px] font-bold text-text-main uppercase tracking-tight leading-normal break-words" title={formatAddress(athlete.address_json)}>
                     {formatAddress(athlete.address_json) || 'Endereço não informado'}
                   </p>
                 </div>
 
                 <div className="space-y-1.5">
                   <p className="text-[7px] font-black uppercase text-text-subtle flex items-center gap-2 tracking-widest">
-                    <IdCard className="w-3 h-3"/> CPF
+                    <IdCard className="w-3 h-3" /> CPF
                   </p>
-                  <p className="text-sm font-black italic text-text-main uppercase tracking-tighter">
+                  <p className="text-[11px] font-black italic text-text-main uppercase tracking-tighter leading-tight">
                     {athlete.document_cpf || (athlete as any).cpf || athlete.address_json?.payerCpf || '---'}
                   </p>
                 </div>
 
                 <div>
                   <p className="text-[7px] font-black text-text-subtle uppercase mb-1 tracking-widest flex items-center gap-1">
-                    <Fingerprint className="w-3 h-3"/> RG
+                    <Fingerprint className="w-3 h-3" /> RG
                   </p>
-                  <p className="text-sm font-black italic text-text-main uppercase tracking-tighter">
+                  <p className="text-[11px] font-black italic text-text-main uppercase tracking-tighter leading-tight">
                     {athlete.document_rg || (athlete as any).rg || '---'}
                   </p>
                 </div>
@@ -552,7 +551,7 @@ export default function PerfilAtleta() {
                   <div className="px-2 py-1 bg-primary/10 border border-primary/20 rounded-full">
                     <span className="text-[8px] font-black italic text-primary-dark uppercase">Oficiais</span>
                   </div>
-                  <button 
+                  <button
                     onClick={() => setIsEditModalOpen(true)}
                     className="p-1 rounded-lg bg-surface-soft border border-border-main hover:border-primary/40 transition-all group/edit"
                   >
@@ -560,7 +559,7 @@ export default function PerfilAtleta() {
                   </button>
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-4 gap-3">
                 {/* Camisa */}
                 <div className="bg-surface-soft border border-border-main p-2.5 rounded-xl flex flex-col items-center justify-center gap-1.5 hover:border-primary/30 transition-all">
@@ -630,7 +629,7 @@ export default function PerfilAtleta() {
                   )}>
                     {currentSubscription?.status === 'active' ? 'Ativo' : 'Pendente'}
                   </span>
-                  <button 
+                  <button
                     onClick={() => setIsMembershipModalOpen(true)}
                     className="p-1 rounded-lg bg-surface-soft border border-border-main hover:border-primary/40 transition-all group/edit"
                   >
@@ -638,7 +637,7 @@ export default function PerfilAtleta() {
                   </button>
                 </div>
               </div>
-              
+
               <div className="space-y-6">
                 <div className="flex items-center justify-between border-b border-border-main pb-4">
                   <p className="text-xs font-black italic text-text-main/80 uppercase">
@@ -652,10 +651,10 @@ export default function PerfilAtleta() {
                   <div>
                     <p className="text-[7px] font-black text-text-subtle uppercase mb-1 tracking-widest">Frequência</p>
                     <p className="text-[10px] font-black italic text-text-main/70 uppercase">
-                      {currentSubscription?.plan?.billing_period === 'monthly' ? 'Mensal' : 
-                       currentSubscription?.plan?.billing_period === 'quarterly' ? 'Trimestral' :
-                       currentSubscription?.plan?.billing_period === 'semiannual' ? 'Semestral' :
-                       currentSubscription?.plan?.billing_period === 'annual' ? 'Anual' : '---'}
+                      {currentSubscription?.plan?.billing_period === 'monthly' ? 'Mensal' :
+                        currentSubscription?.plan?.billing_period === 'quarterly' ? 'Trimestral' :
+                          currentSubscription?.plan?.billing_period === 'semiannual' ? 'Semestral' :
+                            currentSubscription?.plan?.billing_period === 'annual' ? 'Anual' : '---'}
                     </p>
                   </div>
                   <div className="text-right">
@@ -674,12 +673,12 @@ export default function PerfilAtleta() {
                 <FileText className="w-3.5 h-3.5 text-primary" />
                 <h3 className="text-[9px] font-black uppercase text-text-main tracking-widest">Documentos</h3>
               </div>
-              
+
               <div className="space-y-1.5 mb-4 overflow-y-auto max-h-[180px] no-scrollbar">
                 {(athlete as any).documents_json && (athlete as any).documents_json.length > 0 ? (
                   (athlete as any).documents_json.map((doc: any, i: number) => (
-                    <div 
-                      key={i} 
+                    <div
+                      key={i}
                       onClick={() => window.open(doc.url, '_blank')}
                       className="flex items-center justify-between p-2.5 rounded-xl bg-surface-soft border border-border-main group/doc cursor-pointer hover:bg-surface-strong transition-all"
                     >
@@ -698,7 +697,7 @@ export default function PerfilAtleta() {
               </div>
 
               <div className="mt-auto pt-4 border-t border-border-main">
-                <button 
+                <button
                   onClick={() => setIsDocumentModalOpen(true)}
                   className="w-full bg-primary/5 border border-primary/20 border-dashed rounded-xl p-3 flex flex-col items-center justify-center group cursor-pointer hover:bg-primary/10 text-center transition-all"
                 >
@@ -712,12 +711,12 @@ export default function PerfilAtleta() {
         </div>
       </div>
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={()=>setToast(null)} />}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* MODAL: EDITAR ATLETA */}
       {isEditModalOpen && (
-        <NewAthleteForm 
-          onClose={() => setIsEditModalOpen(false)} 
+        <NewAthleteForm
+          onClose={() => setIsEditModalOpen(false)}
           onSuccess={() => {
             fetchAthleteData();
             setIsEditModalOpen(false);
@@ -741,21 +740,21 @@ export default function PerfilAtleta() {
                   <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Atleta: {athlete.full_name}</p>
                 </div>
               </div>
-              <button 
-                onClick={() => setIsMembershipModalOpen(false)} 
+              <button
+                onClick={() => setIsMembershipModalOpen(false)}
                 className="w-10 h-10 rounded-xl bg-[var(--surface-soft)] border border-[var(--border)] flex items-center justify-center hover:border-primary/40 transition-all"
               >
                 <Plus size={24} className="text-[var(--text-muted)] rotate-45" />
               </button>
             </div>
-            
-            <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+
+            <div className="flex flex-col md:flex-row h-full overflow-hidden">
               {/* Coluna Esquerda: Seleção de Plano */}
-              <div className="w-full md:w-1/2 p-8 overflow-y-auto border-r border-[var(--border)] no-scrollbar">
+              <div className="w-full md:w-1/2 p-8 border-r border-[var(--border)] overflow-y-auto scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent">
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">1. Selecione o Plano</h3>
-                    <button 
+                    <button
                       onClick={() => {
                         setIsFree(!isFree);
                         if (!isFree) setSelectedPlanId('FREE');
@@ -763,8 +762,8 @@ export default function PerfilAtleta() {
                       }}
                       className={cn(
                         "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
-                        isFree 
-                          ? "bg-primary text-black border-primary shadow-lg shadow-primary/20" 
+                        isFree
+                          ? "bg-primary text-black border-primary shadow-lg shadow-primary/20"
                           : "bg-surface border-border-main text-text-subtle hover:border-primary/40"
                       )}
                     >
@@ -779,13 +778,13 @@ export default function PerfilAtleta() {
                           <p className="text-[9px] font-black uppercase tracking-[0.3em] text-[var(--text-muted)] ml-1">{membership.name}</p>
                           <div className="grid grid-cols-1 gap-2.5">
                             {membership.plans?.map((plan: any) => (
-                              <button 
+                              <button
                                 key={plan.id}
                                 onClick={() => setSelectedPlanId(plan.id)}
                                 className={cn(
                                   "flex items-center justify-between p-5 rounded-2xl border transition-all text-left group",
-                                  selectedPlanId === plan.id 
-                                    ? "bg-primary/10 border-primary shadow-[0_0_20px_rgba(189,255,1,0.05)]" 
+                                  selectedPlanId === plan.id
+                                    ? "bg-primary/10 border-primary shadow-[0_0_20px_rgba(189,255,1,0.05)]"
                                     : "bg-[var(--surface-soft)] border-[var(--border)] hover:border-primary/40"
                                 )}
                               >
@@ -799,9 +798,9 @@ export default function PerfilAtleta() {
                                   <div>
                                     <p className="text-xs font-black uppercase italic text-[var(--text)] group-hover:text-primary transition-colors">{plan.name}</p>
                                     <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-widest">
-                                      {plan.billing_period === 'monthly' ? 'Pagamento Mensal' : 
-                                       plan.billing_period === 'quarterly' ? 'Pagamento Trimestral' :
-                                       plan.billing_period === 'semiannual' ? 'Pagamento Semestral' : 'Pagamento Anual'}
+                                      {plan.billing_period === 'monthly' ? 'Pagamento Mensal' :
+                                        plan.billing_period === 'quarterly' ? 'Pagamento Trimestral' :
+                                          plan.billing_period === 'semiannual' ? 'Pagamento Semestral' : 'Pagamento Anual'}
                                     </p>
                                   </div>
                                 </div>
@@ -832,20 +831,19 @@ export default function PerfilAtleta() {
               </div>
 
               {/* Coluna Direita: Informações de Pagamento */}
-              <div 
-                className="w-full md:w-1/2 p-8 bg-[var(--surface-soft)]/30 overflow-y-auto flex flex-col custom-scrollbar"
-                style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--primary) transparent' }}
+              <div
+                className="w-full md:w-1/2 p-8 bg-[var(--surface-soft)]/30 overflow-y-auto flex flex-col scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent"
               >
                 <div className="space-y-8 flex-1">
                   <div>
                     <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary mb-6">2. Dados do Pagador & Cobrança</h3>
-                    
+
                     <div className="space-y-5">
                       <div className="grid grid-cols-1 gap-4">
                         <div className="space-y-1.5">
                           <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Nome do Responsável</label>
-                          <input 
-                            value={payerName} 
+                          <input
+                            value={payerName}
                             onChange={(e) => setPayerName(e.target.value)}
                             className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                             placeholder="Ex: Nome do Pai ou Mãe"
@@ -854,17 +852,18 @@ export default function PerfilAtleta() {
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1.5">
                             <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">WhatsApp / Celular</label>
-                            <input 
-                              value={payerPhone} 
-                              onChange={(e) => setPayerPhone(e.target.value)}
+                            <input
+                              value={payerPhone}
+                              onChange={(e) => setPayerPhone(e.target.value.replace(/\D/g, '').replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2').substring(0, 15))}
                               className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                               placeholder="(00) 00000-0000"
                             />
                           </div>
                           <div className="space-y-1.5">
                             <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">E-mail</label>
-                            <input 
-                              value={payerEmail} 
+                            <input
+                              type="email"
+                              value={payerEmail}
                               onChange={(e) => setPayerEmail(e.target.value)}
                               className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                               placeholder="pagamento@email.com"
@@ -878,8 +877,8 @@ export default function PerfilAtleta() {
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
                               <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Dia de Vencimento</label>
-                              <select 
-                                value={dueDay} 
+                              <select
+                                value={dueDay}
                                 onChange={(e) => setDueDay(e.target.value)}
                                 className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)] appearance-none"
                               >
@@ -888,8 +887,8 @@ export default function PerfilAtleta() {
                             </div>
                             <div className="space-y-1.5">
                               <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Método Preferencial</label>
-                              <select 
-                                value={paymentMethod} 
+                              <select
+                                value={paymentMethod}
                                 onChange={(e) => setPaymentMethod(e.target.value as any)}
                                 className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)] appearance-none"
                               >
@@ -907,19 +906,19 @@ export default function PerfilAtleta() {
                                 <div className="grid grid-cols-1 gap-4">
                                   <div className="space-y-1.5">
                                     <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">CPF do Pagador</label>
-                                    <input 
-                                      value={payerCpf} 
+                                    <input
+                                      value={payerCpf}
                                       onChange={(e) => setPayerCpf(e.target.value.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').substring(0, 14))}
                                       className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                                       placeholder="000.000.000-00"
                                     />
                                   </div>
-                                  
+
                                   <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                       <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">CEP</label>
-                                      <input 
-                                        value={payerZip} 
+                                      <input
+                                        value={payerZip}
                                         onChange={(e) => setPayerZip(e.target.value.replace(/\D/g, '').replace(/(\d{5})(\d)/, '$1-$2').substring(0, 9))}
                                         className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                                         placeholder="00000-000"
@@ -927,8 +926,8 @@ export default function PerfilAtleta() {
                                     </div>
                                     <div className="space-y-1.5">
                                       <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Bairro</label>
-                                      <input 
-                                        value={payerNeighborhood} 
+                                      <input
+                                        value={payerNeighborhood}
                                         onChange={(e) => setPayerNeighborhood(e.target.value)}
                                         className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                                         placeholder="Centro"
@@ -939,8 +938,8 @@ export default function PerfilAtleta() {
                                   <div className="grid grid-cols-4 gap-4">
                                     <div className="col-span-3 space-y-1.5">
                                       <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Logradouro (Rua/Av)</label>
-                                      <input 
-                                        value={payerStreet} 
+                                      <input
+                                        value={payerStreet}
                                         onChange={(e) => setPayerStreet(e.target.value)}
                                         className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                                         placeholder="Rua das Flores"
@@ -948,8 +947,8 @@ export default function PerfilAtleta() {
                                     </div>
                                     <div className="space-y-1.5">
                                       <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Nº</label>
-                                      <input 
-                                        value={payerNumber} 
+                                      <input
+                                        value={payerNumber}
                                         onChange={(e) => setPayerNumber(e.target.value)}
                                         className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                                         placeholder="123"
@@ -965,8 +964,8 @@ export default function PerfilAtleta() {
                                   <div className="space-y-1.5">
                                     <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Número do Cartão</label>
                                     <div className="relative">
-                                      <input 
-                                        value={cardNumber} 
+                                      <input
+                                        value={cardNumber}
                                         onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, '').replace(/(\d{4})(\d)/g, '$1 $2').substring(0, 19))}
                                         className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl pl-12 pr-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                                         placeholder="0000 0000 0000 0000"
@@ -974,11 +973,11 @@ export default function PerfilAtleta() {
                                       <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-subtle" />
                                     </div>
                                   </div>
-                                  
+
                                   <div className="space-y-1.5">
                                     <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Nome no Cartão</label>
-                                    <input 
-                                      value={cardHolder} 
+                                    <input
+                                      value={cardHolder}
                                       onChange={(e) => setCardHolder(e.target.value)}
                                       className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                                       placeholder="NOME IGUAL NO CARTÃO"
@@ -988,8 +987,8 @@ export default function PerfilAtleta() {
                                   <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                       <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Validade (MM/AA)</label>
-                                      <input 
-                                        value={cardExpiry} 
+                                      <input
+                                        value={cardExpiry}
                                         onChange={(e) => setCardExpiry(e.target.value.replace(/\D/g, '').replace(/(\d{2})(\d)/, '$1/$2').substring(0, 5))}
                                         className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                                         placeholder="05/30"
@@ -997,8 +996,8 @@ export default function PerfilAtleta() {
                                     </div>
                                     <div className="space-y-1.5">
                                       <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">CVV</label>
-                                      <input 
-                                        value={cardCvv} 
+                                      <input
+                                        value={cardCvv}
                                         onChange={(e) => setCardCvv(e.target.value)}
                                         type="password"
                                         maxLength={4}
@@ -1018,7 +1017,7 @@ export default function PerfilAtleta() {
 
 
                   <div className="mt-auto pt-6 border-t border-[var(--border)]">
-                    <button 
+                    <button
                       onClick={handleSaveSubscription}
                       disabled={isSavingSubscription || (!isFree && !selectedPlanId)}
                       className="w-full py-5 bg-primary text-black rounded-[24px] text-[11px] font-black uppercase tracking-[0.2em] hover:scale-[1.02] active:scale-[0.98] transition-all shadow-2xl shadow-primary/30 flex items-center justify-center gap-3 disabled:opacity-50"
@@ -1027,12 +1026,12 @@ export default function PerfilAtleta() {
                       {isFree ? 'Confirmar Isenção' : 'Ativar Assinatura'}
                     </button>
                   </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
 
 
       {/* MODAL: NOVO DOCUMENTO */}
@@ -1049,8 +1048,8 @@ export default function PerfilAtleta() {
                   <p className="text-[9px] font-bold text-primary uppercase tracking-widest">Anexar ao Dossiê</p>
                 </div>
               </div>
-              <button 
-                onClick={() => setIsDocumentModalOpen(false)} 
+              <button
+                onClick={() => setIsDocumentModalOpen(false)}
                 className="w-8 h-8 rounded-lg bg-[var(--surface-soft)] border border-[var(--border)] flex items-center justify-center hover:border-primary/40 transition-all"
               >
                 <X size={18} className="text-[var(--text-muted)]" />
@@ -1060,8 +1059,8 @@ export default function PerfilAtleta() {
             <div className="p-8 space-y-6">
               <div className="space-y-1.5">
                 <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Título do Documento</label>
-                <input 
-                  value={docTitle} 
+                <input
+                  value={docTitle}
                   onChange={(e) => setDocTitle(e.target.value)}
                   className="w-full bg-[var(--surface-soft)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                   placeholder="Ex: RG - Frente"
@@ -1070,7 +1069,7 @@ export default function PerfilAtleta() {
 
               <div className="space-y-1.5">
                 <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Categoria</label>
-                <select 
+                <select
                   value={docCategory}
                   onChange={(e) => setDocCategory(e.target.value)}
                   className="w-full bg-[var(--surface-soft)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)] appearance-none"
@@ -1084,36 +1083,36 @@ export default function PerfilAtleta() {
               </div>
 
               <label className="relative border-2 border-dashed border-[var(--border)] rounded-[24px] p-10 flex flex-col items-center justify-center bg-[var(--surface-soft)]/30 hover:border-primary/40 transition-all cursor-pointer group">
-                <input 
-                  type="file" 
-                  className="hidden" 
+                <input
+                  type="file"
+                  className="hidden"
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    
+
                     setIsUploading(true);
                     try {
                       const fileExt = file.name.split('.').pop();
                       const fileName = `doc-${Date.now()}.${fileExt}`;
-                      
+
                       const { error: uploadError } = await supabase!.storage
                         .from('documents')
                         .upload(fileName, file);
-                      
+
                       if (uploadError) throw uploadError;
-                      
+
                       const { data: { publicUrl } } = supabase!.storage.from('documents').getPublicUrl(fileName);
-                      
+
                       const newDoc = { name: docTitle || file.name, category: docCategory, url: publicUrl, date: new Date().toISOString() };
                       const currentDocs = athlete.documents_json || [];
-                      
+
                       const { error: updateError } = await supabase!
                         .from('athletes')
                         .update({ documents_json: [...currentDocs, newDoc] })
                         .eq('id', athlete.id);
-                        
+
                       if (updateError) throw updateError;
-                      
+
                       showToast('Documento enviado com sucesso!');
                       fetchAthleteData();
                       setIsDocumentModalOpen(false);
@@ -1134,7 +1133,7 @@ export default function PerfilAtleta() {
                 <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-widest">PDF, PNG ou JPG (Max 5MB)</p>
               </label>
 
-              <button 
+              <button
                 disabled={isUploading || !docTitle}
                 className="w-full py-4 bg-primary text-black rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-3 disabled:opacity-50"
               >
