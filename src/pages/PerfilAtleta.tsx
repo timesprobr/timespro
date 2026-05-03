@@ -169,9 +169,9 @@ export default function PerfilAtleta() {
         .from('athletes')
         .select(`
           *,
-          category:athlete_categories(name),
-          modality:athlete_modalities(name),
-          position_data:athlete_positions(name),
+          category:category_id(name),
+          modality:modality_id(name),
+          position_data:position_id(name),
           subscription:athlete_subscriptions(
             *,
             plan:membership_plans(*)
@@ -237,7 +237,7 @@ export default function PerfilAtleta() {
           payer_email: payerEmail,
           due_day: parseInt(dueDay),
           payment_method: paymentMethod,
-          auto_charge: saveCard,
+          auto_charge: paymentMethod === 'card',
           payer_cpf: payerCpf,
           payer_address: {
             zip: payerZip,
@@ -409,42 +409,50 @@ export default function PerfilAtleta() {
 
               <div className="p-5 -mt-8 relative z-10 flex flex-col flex-grow">
                 <div className="flex-grow">
-                  <div className="mb-4">
-                    <h2 className="text-lg font-black uppercase italic tracking-tighter text-text-main leading-tight mb-1.5">
-                      {athlete.nickname || athlete.full_name.split(' ')[0]}
-                    </h2>
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        athlete.position_data?.name || athlete.position, 
-                        athlete.category?.name, 
-                        athlete.modality?.name
-                      ].filter(Boolean).map((tag, i) => (
-                        <span key={i} className="text-[7px] font-black uppercase bg-primary/10 border border-primary/20 text-primary-dark px-2 py-0.5 rounded-md italic tracking-tight">
-                          {tag}
-                        </span>
-                      ))}
+                  <div className="flex flex-col">
+                    <h1 className="text-3xl font-black uppercase italic tracking-tighter text-text-main leading-none mb-1">{athlete.full_name}</h1>
+                    <div className="flex items-center gap-3">
+                      <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] italic">{athlete.nickname || 'Sem Apelido'}</p>
+                      {athlete.email && (
+                        <div className="flex items-center gap-1 text-[9px] font-bold text-text-muted lowercase tracking-tight border-l border-border-main pl-3">
+                          <span className="opacity-50">@</span>
+                          {athlete.email}
+                        </div>
+                      )}
                     </div>
                   </div>
+                  
+                  <div className="flex flex-wrap gap-1.5 mt-4">
+                    {[
+                      athlete.position_data?.name || athlete.position, 
+                      athlete.category?.name || 'Sem Categoria', 
+                      athlete.modality?.name || 'Sem Modalidade'
+                    ].filter(Boolean).map((tag, i) => (
+                      <span key={i} className="text-[7px] font-black uppercase bg-primary/10 border border-primary/20 text-primary-dark px-2 py-0.5 rounded-md italic tracking-tight">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
 
-                  {/* Contatos */}
-                  <div className="border-t border-border-main pt-4 space-y-3">
-                    <div className="flex items-center gap-2.5 group/info">
-                      <div className="p-1.5 rounded-lg bg-surface-soft border border-border-main group-hover/info:border-primary/20 transition-colors">
-                        <Mail className="w-3 h-3 text-text-subtle group-hover/info:text-primary transition-colors" />
-                      </div>
-                      <div className="overflow-hidden">
-                        <p className="text-[6px] font-black text-text-subtle uppercase tracking-[0.2em] mb-0.5">Email</p>
-                        <p className="text-[10px] font-black italic text-text-main/80 truncate">{athlete.email || 'Não informado'}</p>
-                      </div>
+                {/* Contatos */}
+                <div className="border-t border-border-main pt-4 space-y-3">
+                  <div className="flex items-center gap-2.5 group/info">
+                    <div className="p-1.5 rounded-lg bg-surface-soft border border-border-main group-hover/info:border-primary/20 transition-colors">
+                      <Mail className="w-3 h-3 text-text-subtle group-hover/info:text-primary transition-colors" />
                     </div>
-                    <div className="flex items-center gap-2.5 group/info">
-                      <div className="p-1.5 rounded-lg bg-surface-soft border border-border-main group-hover/info:border-primary/20 transition-colors">
-                        <Phone className="w-3 h-3 text-text-subtle group-hover/info:text-primary transition-colors" />
-                      </div>
-                      <div className="overflow-hidden">
-                        <p className="text-[6px] font-black text-text-subtle uppercase tracking-[0.2em] mb-0.5">Telefone</p>
-                        <p className="text-[10px] font-black italic text-text-main/80">{athlete.whatsapp || 'Não informado'}</p>
-                      </div>
+                    <div className="overflow-hidden">
+                      <p className="text-[6px] font-black text-text-subtle uppercase tracking-[0.2em] mb-0.5">Email</p>
+                      <p className="text-[10px] font-black italic text-text-main/80 truncate">{athlete.email || 'Não informado'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5 group/info">
+                    <div className="p-1.5 rounded-lg bg-surface-soft border border-border-main group-hover/info:border-primary/20 transition-colors">
+                      <Phone className="w-3 h-3 text-text-subtle group-hover/info:text-primary transition-colors" />
+                    </div>
+                    <div className="overflow-hidden">
+                      <p className="text-[6px] font-black text-text-subtle uppercase tracking-[0.2em] mb-0.5">Telefone</p>
+                      <p className="text-[10px] font-black italic text-text-main/80">{athlete.whatsapp || 'Não informado'}</p>
                     </div>
                   </div>
                 </div>
@@ -598,8 +606,9 @@ export default function PerfilAtleta() {
                   </div>
                 </div>
                 <div className="flex gap-1.5">
-                  <span className={`px-3 py-1.5 rounded-lg text-[9px] font-black italic uppercase transition-all ${athlete.gender === 'canhoto' ? 'bg-primary text-black' : 'bg-surface border border-border-main text-text-muted opacity-40'}`}>Canhoto</span>
-                  <span className={`px-3 py-1.5 rounded-lg text-[9px] font-black italic uppercase transition-all ${athlete.gender !== 'canhoto' ? 'bg-primary text-black' : 'bg-surface border border-border-main text-text-muted opacity-40'}`}>Destro</span>
+                  <span className={`px-3 py-1.5 rounded-lg text-[9px] font-black italic uppercase transition-all ${athlete.dominant_foot === 'Canhoto' ? 'bg-primary text-black' : 'bg-surface border border-border-main text-text-muted opacity-40'}`}>Canhoto</span>
+                  <span className={`px-3 py-1.5 rounded-lg text-[9px] font-black italic uppercase transition-all ${athlete.dominant_foot === 'Destro' || !athlete.dominant_foot ? 'bg-primary text-black' : 'bg-surface border border-border-main text-text-muted opacity-40'}`}>Destro</span>
+                  <span className={`px-3 py-1.5 rounded-lg text-[9px] font-black italic uppercase transition-all ${athlete.dominant_foot === 'Ambidestro' ? 'bg-primary text-black' : 'bg-surface border border-border-main text-text-muted opacity-40'}`}>Ambi</span>
                 </div>
               </div>
             </div>
@@ -790,9 +799,9 @@ export default function PerfilAtleta() {
                                   <div>
                                     <p className="text-xs font-black uppercase italic text-[var(--text)] group-hover:text-primary transition-colors">{plan.name}</p>
                                     <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-widest">
-                                      Recorrência {plan.billing_period === 'monthly' ? 'Mensal' : 
-                                       plan.billing_period === 'quarterly' ? 'Trimestral' :
-                                       plan.billing_period === 'semiannual' ? 'Semestral' : 'Anual'}
+                                      {plan.billing_period === 'monthly' ? 'Pagamento Mensal' : 
+                                       plan.billing_period === 'quarterly' ? 'Pagamento Trimestral' :
+                                       plan.billing_period === 'semiannual' ? 'Pagamento Semestral' : 'Pagamento Anual'}
                                     </p>
                                   </div>
                                 </div>
@@ -823,7 +832,10 @@ export default function PerfilAtleta() {
               </div>
 
               {/* Coluna Direita: Informações de Pagamento */}
-              <div className="w-full md:w-1/2 p-8 bg-[var(--surface-soft)]/30 overflow-y-auto custom-scrollbar flex flex-col">
+              <div 
+                className="w-full md:w-1/2 p-8 bg-[var(--surface-soft)]/30 overflow-y-auto flex flex-col custom-scrollbar"
+                style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--primary) transparent' }}
+              >
                 <div className="space-y-8 flex-1">
                   <div>
                     <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary mb-6">2. Dados do Pagador & Cobrança</h3>
@@ -897,7 +909,7 @@ export default function PerfilAtleta() {
                                     <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">CPF do Pagador</label>
                                     <input 
                                       value={payerCpf} 
-                                      onChange={(e) => setPayerCpf(e.target.value)}
+                                      onChange={(e) => setPayerCpf(e.target.value.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').substring(0, 14))}
                                       className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                                       placeholder="000.000.000-00"
                                     />
@@ -908,7 +920,7 @@ export default function PerfilAtleta() {
                                       <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">CEP</label>
                                       <input 
                                         value={payerZip} 
-                                        onChange={(e) => setPayerZip(e.target.value)}
+                                        onChange={(e) => setPayerZip(e.target.value.replace(/\D/g, '').replace(/(\d{5})(\d)/, '$1-$2').substring(0, 9))}
                                         className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                                         placeholder="00000-000"
                                       />
@@ -955,7 +967,7 @@ export default function PerfilAtleta() {
                                     <div className="relative">
                                       <input 
                                         value={cardNumber} 
-                                        onChange={(e) => setCardNumber(e.target.value)}
+                                        onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, '').replace(/(\d{4})(\d)/g, '$1 $2').substring(0, 19))}
                                         className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl pl-12 pr-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                                         placeholder="0000 0000 0000 0000"
                                       />
@@ -978,7 +990,7 @@ export default function PerfilAtleta() {
                                       <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Validade (MM/AA)</label>
                                       <input 
                                         value={cardExpiry} 
-                                        onChange={(e) => setCardExpiry(e.target.value)}
+                                        onChange={(e) => setCardExpiry(e.target.value.replace(/\D/g, '').replace(/(\d{2})(\d)/, '$1/$2').substring(0, 5))}
                                         className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
                                         placeholder="05/30"
                                       />
@@ -994,12 +1006,16 @@ export default function PerfilAtleta() {
                                         placeholder="***"
                                       />
                                     </div>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           )}
                         </div>
                       )}
                     </div>
                   </div>
+
 
                   <div className="mt-auto pt-6 border-t border-[var(--border)]">
                     <button 
@@ -1011,13 +1027,13 @@ export default function PerfilAtleta() {
                       {isFree ? 'Confirmar Isenção' : 'Ativar Assinatura'}
                     </button>
                   </div>
-                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
     )}
+
 
       {/* MODAL: NOVO DOCUMENTO */}
       {isDocumentModalOpen && (

@@ -60,7 +60,8 @@ export default function NewAthleteForm({ onClose, onSuccess, athlete }: NewAthle
       short: '',
       socks: '',
       boots: ''
-    }
+    },
+    dominant_foot: athlete?.dominant_foot || 'Destro'
   });
 
   const [documents, setDocuments] = useState<{ name: string; file: File; uploading?: boolean; url?: string | null; error?: string | null }[]>([]);
@@ -255,6 +256,7 @@ export default function NewAthleteForm({ onClose, onSuccess, athlete }: NewAthle
         modality_id: formData.modality_id || null,
         category_id: formData.category_id || null,
         position_id: formData.position_id || null,
+        dominant_foot: formData.dominant_foot,
         position: positions.find(p => p.id === formData.position_id)?.name || formData.position, // Fallback for backward compatibility
         status: athlete?.status || 'Ativo'
       };
@@ -395,9 +397,19 @@ export default function NewAthleteForm({ onClose, onSuccess, athlete }: NewAthle
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">E-mail de Contato</label>
-                <input type="email" name="email" value={formData.email} onChange={handleInputChange} className="input-field" placeholder="exemplo@email.com" />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">E-mail de Contato</label>
+                  <input type="email" name="email" value={formData.email} onChange={handleInputChange} className="input-field" placeholder="exemplo@email.com" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Pé Dominante</label>
+                  <select name="dominant_foot" value={formData.dominant_foot} onChange={handleInputChange} className="input-field">
+                    <option value="Destro">Destro (Direito)</option>
+                    <option value="Canhoto">Canhoto (Esquerdo)</option>
+                    <option value="Ambidestro">Ambidestro</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
