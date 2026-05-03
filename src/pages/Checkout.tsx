@@ -174,6 +174,41 @@ export default function Checkout() {
     return value.replace(/\D/g, '').substring(0, 4);
   };
 
+  // Funções de Validação
+  const isEmailValid = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const isCPFValid = (cpf: string) => cpf.replace(/\D/g, '').length === 11;
+  const isPhoneValid = (phone: string) => phone.replace(/\D/g, '').length >= 10;
+
+  const isPersonalDataValid = () => {
+    return (
+      formData.name.trim().length >= 3 &&
+      isCPFValid(formData.taxId) &&
+      isEmailValid(formData.email) &&
+      isPhoneValid(formData.phone)
+    );
+  };
+
+  const isCardDataValid = () => {
+    const cleanCard = cardData.number.replace(/\D/g, '');
+    const cleanCVV = cardData.cvv.replace(/\D/g, '');
+    return (
+      cleanCard.length >= 15 &&
+      cardData.expiry.length === 5 &&
+      cleanCVV.length >= 3 &&
+      cardData.name.trim().length >= 3
+    );
+  };
+
+  const canProceed = () => {
+    if (!paymentMethod) return false;
+    if (paymentMethod === 'pix') return isPersonalDataValid();
+    if (paymentMethod === 'card') {
+      if (step === 1) return isPersonalDataValid();
+      if (step === 2) return isPersonalDataValid() && isCardDataValid();
+    }
+    return false;
+  };
+
   const handlePayment = async () => {
     try {
       // Se for cartão e estiver no passo 1, avança para o passo 2
@@ -488,8 +523,8 @@ export default function Checkout() {
 
                 <button
                   onClick={handlePayment}
-                  disabled={loading || !paymentMethod}
-                  className="w-full py-4 bg-[#A3E635] text-[#0F172A] rounded-[20px] font-black text-base shadow-xl shadow-[#A3E635]/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 mt-4"
+                  disabled={loading || !canProceed()}
+                  className="w-full py-4 bg-[#A3E635] text-[#0F172A] rounded-[20px] font-black text-base shadow-xl shadow-[#A3E635]/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed flex items-center justify-center gap-3 mt-4"
                 >
                   {loading ? (
                     <div className="w-5 h-5 border-2 border-[#0F172A]/20 border-t-[#0F172A] rounded-full animate-spin" />
