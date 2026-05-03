@@ -247,10 +247,18 @@ export default function Checkout() {
           });
           setTimeLeft(1800);
         } else if (data?.url) {
+          // Se não veio pix direto mas veio URL (checkout hibrido/link)
           window.location.href = data.url;
         }
-      } else if (data?.url) {
-        window.location.href = data.url;
+      } else {
+        // Para cartão, sempre redireciona para a URL de checkout do AbacatePay
+        const redirectUrl = data?.url || result?.url || result?.data?.url;
+        if (redirectUrl) {
+          window.location.href = redirectUrl;
+        } else {
+          console.error('URL de redirecionamento não encontrada:', data);
+          throw new Error('Não foi possível gerar o link de pagamento do cartão.');
+        }
       }
     } catch (err: any) {
       console.error('Erro no pagamento:', err);
@@ -336,7 +344,7 @@ export default function Checkout() {
                       <div className="space-y-0.5">
                         <p className="text-slate-500 text-[10px] lg:text-sm font-medium uppercase tracking-wider">Atleta</p>
                         <h3 className="font-black text-lg lg:text-2xl text-white tracking-tight uppercase italic truncate max-w-[150px] lg:max-w-none">
-                          {formData.name || billingData?.athletes?.full_name || 'Atleta'}
+                          {billingData?.athletes?.full_name || formData.name || 'Atleta'}
                         </h3>
                       </div>
 
