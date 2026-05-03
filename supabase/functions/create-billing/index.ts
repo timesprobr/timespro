@@ -18,7 +18,8 @@ serve(async (req) => {
     console.log('Recebido na Function:', JSON.stringify(data));
 
     const amount = Number.parseInt(String(data.amountCentavos)) || 1000;
-    const isPix = data.methods?.includes('PIX');
+    const method = data.method?.toUpperCase() || 'PIX';
+    const isPix = method === 'PIX';
     
     let endpoint = '';
     let payload = {};

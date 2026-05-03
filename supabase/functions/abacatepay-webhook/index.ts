@@ -1,32 +1,61 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-// Setup type definitions for built-in Supabase Runtime APIs
-import "@supabase/functions-js/edge-runtime.d.ts"
-
-console.log("Hello from Functions!")
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
 Deno.serve(async (req) => {
-  const { name } = await req.json()
-  const data = {
-    message: `Hello ${name}!`,
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
   }
 
-  return new Response(
-    JSON.stringify(data),
-    { headers: { "Content-Type": "application/json" } },
-  )
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey)
+
+    const body = await req.json()
+    console.log('Webhook AbacatePay recebido:', JSON.stringify(body))
+
+    const { event, data } = body
+
+    // Eventos de sucesso no AbacatePay
+    if (event === 'billing.paid' || event === 'checkout.completed' || event === 'transparent.completed') {
+      const paymentId = data.externalId // O UUID que enviamos no checkout
+      
+      if (paymentId) {
+        console.log(`Atualizando status do pagamento no banco: ${paymentId}`)
+        
+        const { error } = await supabaseClient
+          .from('subscription_payments')
+          .update({ 
+            status: 'paid',
+            paid_at: new Date().toISOString(),
+            external_id: data.id // Salva o ID do AbacatePay (ex: bill_...)
+          })
+          .eq('id', paymentId)
+
+        if (error) {
+          console.error('Erro ao atualizar assinatura no banco:', error)
+          throw error
+        }
+        
+        console.log('✅ Pagamento processado e banco atualizado com sucesso!')
+      } else {
+        console.warn('⚠️ Webhook recebido sem externalId.')
+      }
+    }
+
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
+    })
+  } catch (err) {
+    console.error('❌ Erro no processamento do webhook:', err.message)
+    return new Response(JSON.stringify({ error: err.message }), { 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400 
+    })
+  }
 })
-
-/* To invoke locally:
-
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
-
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/abacatepay-webhook' \
-    --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
-    --header 'Content-Type: application/json' \
-    --data '{"name":"Functions"}'
-
-*/
