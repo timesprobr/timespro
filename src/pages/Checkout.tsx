@@ -303,10 +303,10 @@ export default function Checkout() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-start">
           
           {/* Coluna Esquerda: Branding e Resumo (Sempre visível) */}
-          <div className="space-y-8 lg:sticky lg:top-32">
-            <div className="flex items-center gap-4 mb-6 lg:mb-10">
+          <div className="space-y-4 lg:space-y-8 lg:sticky lg:top-32">
+            <div className="flex items-center gap-4 mb-4 lg:mb-10">
               {displayOrg?.logo_url && (
-                <img src={displayOrg.logo_url} alt={displayOrg.name} className="w-16 h-16 lg:w-20 lg:h-20 rounded-2xl object-cover shadow-xl border border-slate-100" />
+                <img src={displayOrg.logo_url} alt={displayOrg.name} className="w-12 h-12 lg:w-20 lg:h-20 rounded-2xl object-cover shadow-xl border border-slate-100" />
               )}
               <div className="space-y-1">
                 <h1 className="font-black text-2xl lg:text-3xl text-slate-900 tracking-tight leading-none uppercase italic">
@@ -321,37 +321,39 @@ export default function Checkout() {
 
             {/* Premium Summary Card */}
             <div className="relative group">
-              <div className="bg-gradient-to-br from-[#1C1C1C] via-[#2D2D2D] to-[#1C1C1C] rounded-[32px] p-8 text-white shadow-2xl overflow-hidden border border-white/10 relative transition-all duration-500">
-                <div className="absolute top-0 right-0 w-48 h-48 bg-[#A3E635]/5 blur-[80px] rounded-full -translate-y-1/2 translate-x-1/2" />
-                <CreditCard className="absolute -right-8 -bottom-8 w-64 h-64 text-white/[0.03] -rotate-12 pointer-events-none" />
+              <div className="bg-gradient-to-br from-[#1C1C1C] via-[#2D2D2D] to-[#1C1C1C] rounded-[24px] lg:rounded-[32px] p-5 lg:p-8 text-white shadow-2xl overflow-hidden border border-white/10 relative transition-all duration-500">
+                <div className="absolute top-0 right-0 w-32 h-32 lg:w-48 lg:h-48 bg-[#A3E635]/5 blur-[60px] lg:blur-[80px] rounded-full -translate-y-1/2 translate-x-1/2" />
+                <CreditCard className="absolute -right-8 -bottom-8 w-48 h-48 lg:w-64 lg:h-64 text-white/[0.03] -rotate-12 pointer-events-none" />
                 
-                <div className="relative z-10 space-y-8">
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-[#A3E635]"></div>
-                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">Resumo do Atleta</span>
+                <div className="relative z-10 space-y-4 lg:space-y-8">
+                  <div className="flex flex-col lg:space-y-4">
+                    <div className="flex items-center gap-2.5 mb-2 lg:mb-0">
+                      <div className="w-2 h-2 lg:w-2.5 lg:h-2.5 rounded-full bg-[#A3E635]"></div>
+                      <span className="text-[9px] lg:text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">Resumo do Atleta</span>
                     </div>
                     
-                    <div className="space-y-1">
-                      <p className="text-slate-400 text-sm font-medium">Atleta</p>
-                      <h3 className="font-black text-2xl text-white tracking-tight uppercase italic">
-                        {formData.name || billingData?.athletes?.full_name || 'Atleta'}
-                      </h3>
-                    </div>
+                    <div className="flex justify-between items-end lg:flex-col lg:items-start gap-4">
+                      <div className="space-y-0.5">
+                        <p className="text-slate-500 text-[10px] lg:text-sm font-medium uppercase tracking-wider">Atleta</p>
+                        <h3 className="font-black text-lg lg:text-2xl text-white tracking-tight uppercase italic truncate max-w-[150px] lg:max-w-none">
+                          {formData.name || billingData?.athletes?.full_name || 'Atleta'}
+                        </h3>
+                      </div>
 
-                    <div className="pt-4 space-y-1">
-                      <p className="text-slate-400 text-sm font-medium">Referente a</p>
-                      <h4 className="font-bold text-lg text-[#A3E635]">
-                        {billingData?.description || 'Mensalidade'}
-                      </h4>
+                      <div className="lg:pt-4 space-y-0.5 text-right lg:text-left">
+                        <p className="text-slate-500 text-[10px] lg:text-sm font-medium uppercase tracking-wider">Plano</p>
+                        <h4 className="font-bold text-sm lg:text-lg text-[#A3E635] truncate max-w-[120px] lg:max-w-none">
+                          {billingData?.description || 'Mensalidade'}
+                        </h4>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="pt-8 border-t border-white/10 flex items-center justify-between gap-6">
-                    <div className="text-right w-full">
-                      <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-1.5 text-left">Valor Total</p>
-                      <div className="text-[44px] lg:text-[54px] font-black text-white tracking-tighter leading-none flex items-baseline gap-2">
-                        <span className="text-[20px] text-white/40 font-bold">R$</span>
+                  <div className="pt-4 lg:pt-8 border-t border-white/10 flex items-center justify-between">
+                    <div className="flex items-center justify-between w-full">
+                      <p className="text-[9px] lg:text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">Valor Total</p>
+                      <div className="text-[32px] lg:text-[54px] font-black text-white tracking-tighter leading-none flex items-baseline gap-1.5">
+                        <span className="text-[14px] lg:text-[20px] text-white/40 font-bold">R$</span>
                         {amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
