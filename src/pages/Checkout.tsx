@@ -41,6 +41,9 @@ export default function Checkout() {
   const [pixData, setPixData] = useState<{ qrcode: string; code: string; url?: string } | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
   const [step, setStep] = useState(1); // 1: Personal Data, 2: Payment Details (for Card)
+  const [showModal, setShowModal] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     taxId: '',
@@ -256,18 +259,19 @@ export default function Checkout() {
           window.location.href = data.url;
         }
       } else {
-        // Para cartão, sempre redireciona para a URL de checkout do AbacatePay
+        // Para cartão, abre o modal em vez de redirecionar a página toda
         const redirectUrl = data?.url || result?.url || result?.data?.url;
         if (redirectUrl) {
-          window.location.href = redirectUrl;
+          setCheckoutUrl(redirectUrl);
+          setShowModal(true);
         } else {
-          console.error('URL de redirecionamento não encontrada:', data);
-          throw new Error('Não foi possível gerar o link de pagamento do cartão.');
+          console.error('URL de redirecionamento não encontrada:', result);
+          throw new Error(result?.error || 'Não foi possível gerar o link de pagamento do cartão.');
         }
       }
     } catch (err: any) {
       console.error('Erro no pagamento:', err);
-      alert(err.message || 'Erro ao processar pagamento');
+      alert(err.message || 'Erro ao gerar pagamento. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -289,8 +293,79 @@ export default function Checkout() {
     );
   }
 
+  if (isProcessing) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6">
+          <div className="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto animate-pulse">
+            <Clock className="w-10 h-10 text-amber-500" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-white">Pagamento em Processamento</h2>
+            <p className="text-slate-400">
+              Recebemos sua solicitação. Assim que o pagamento for confirmado, você receberá um e-mail e seu acesso será liberado.
+            </p>
+          </div>
+          <button 
+            onClick={() => navigate('/')}
+            className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl font-bold transition-all"
+          >
+            Voltar para o Início
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-white font-sans text-[#1A1A1A] pb-20 overflow-x-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500/30">
+      {/* Modal de Pagamento */}
+      {showModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 lg:p-10">
+          <div 
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => {
+              setShowModal(false);
+              setIsProcessing(true);
+            }}
+          />
+          <div className="relative w-full h-full max-w-6xl bg-white rounded-[2rem] overflow-hidden shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between p-4 bg-slate-50 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-indigo-600" />
+                <span className="font-semibold text-slate-700">Ambiente de Pagamento Seguro</span>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowModal(false);
+                  setIsProcessing(true);
+                }}
+                className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-500"
+              >
+                <ArrowLeft className="w-6 h-6" />
+              </button>
+            </div>
+            <iframe 
+              src={checkoutUrl}
+              className="w-full h-full border-none"
+              title="Checkout"
+              onLoad={(e) => {
+                // Pequena verificação se o iframe carregou ou foi bloqueado
+                console.log("Iframe carregado");
+              }}
+            />
+            <div className="p-3 bg-slate-100 text-center">
+              <button 
+                onClick={() => window.open(checkoutUrl, '_blank', 'width=500,height=700')}
+                className="text-xs text-slate-500 hover:text-indigo-600 underline"
+              >
+                Problemas com o carregamento? Clique aqui para abrir em nova janela.
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="py-6 px-6 bg-white sticky top-0 z-50 border-b border-slate-50">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
