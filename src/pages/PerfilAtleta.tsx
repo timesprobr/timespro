@@ -32,6 +32,8 @@ import {
   ShieldCheck,
   AlertCircle,
   Trash2,
+  ArrowUpRight,
+  MessageCircle,
   History,
   AlertTriangle,
   Receipt,
@@ -833,248 +835,228 @@ export default function PerfilAtleta() {
         {/* ABA FINANCEIRO */}
         {activeTab === 'financeiro' && (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* CARD MENSALIDADE ATIVA */}
-              <div className="lg:col-span-2 bg-surface border border-border-main rounded-[24px] p-6 shadow-sm relative overflow-hidden group backdrop-blur-xl">
-                <div className="absolute top-0 right-0 p-6">
-                  <CreditCard className="w-16 h-16 text-primary/5 -rotate-12 absolute -top-2 -right-2" />
-                </div>
-
-                <div className="relative z-10">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-11 h-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-                        <Zap className="w-5 h-5 text-primary" />
+            {/* GRID PRINCIPAL FINANCEIRO */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-start">
+              
+              {/* COLUNA LATERAL ESQUERDA: CARDS COMPACTOS */}
+              <div className="lg:col-span-1 space-y-4">
+                {/* ASSINATURA ATIVA (MUITO COMPACTA) */}
+                <div className="bg-surface border border-border-main rounded-[20px] p-4 shadow-sm backdrop-blur-xl">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-primary/10 rounded-lg">
+                        <Zap className="w-3.5 h-3.5 text-primary" />
                       </div>
-                      <div>
-                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-text-main italic">Assinatura Ativa</h3>
-                        <p className="text-[9px] font-bold text-text-subtle uppercase tracking-widest">Status do Plano</p>
-                      </div>
+                      <h3 className="text-[10px] font-black uppercase tracking-wider text-text-main italic">Plano</h3>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-1">
                       <button
                         onClick={() => setIsMembershipModalOpen(true)}
-                        className="px-4 py-2 rounded-lg bg-surface-soft border border-border-main hover:border-primary/40 transition-all text-[9px] font-black uppercase tracking-widest text-text-main flex items-center gap-2"
+                        className="p-1.5 rounded-md hover:bg-surface-soft text-text-muted hover:text-primary transition-colors"
+                        title="Editar Plano"
                       >
-                        <Edit3 className="w-3 h-3 text-primary" />
-                        Alterar Plano
+                        <Edit3 className="w-3 h-3" />
                       </button>
                       <button
                         onClick={() => openConfirmModal({
-                          title: "Cancelar Mensalidade?",
-                          description: "Esta ação interromperá as cobranças futuras. O atleta perderá o acesso aos benefícios do plano ao final do ciclo atual.",
+                          title: "Cancelar?",
+                          description: "Deseja cancelar as cobranças futuras?",
                           type: "danger",
                           onConfirm: handleCancelSubscription
                         })}
-                        className="px-4 py-2 rounded-lg bg-red-500/5 border border-red-500/20 hover:bg-red-500/10 transition-all text-[9px] font-black uppercase tracking-widest text-red-500 flex items-center gap-2"
+                        className="p-1.5 rounded-md hover:bg-red-500/10 text-text-muted hover:text-red-500 transition-colors"
+                        title="Cancelar"
                       >
                         <Trash2 className="w-3 h-3" />
-                        Cancelar
                       </button>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-surface-soft/50 border border-border-main p-4 rounded-2xl">
-                      <p className="text-[7px] font-black uppercase text-text-subtle tracking-[0.2em] mb-1">Plano Atual</p>
-                      <h4 className="text-base font-black italic text-text-main uppercase tracking-tighter leading-tight">
-                        {currentSubscription?.status === 'free' ? 'PLANO DE ISENÇÃO' : (currentSubscription?.plan?.membership?.name || 'Clube')}
-                      </h4>
-                      <p className="text-[10px] font-bold text-primary uppercase mt-0.5">
-                        {currentSubscription?.status === 'free' ? 'ISENÇÃO TOTAL' : (currentSubscription?.plan?.name || 'Sem Plano Ativo')}
-                      </p>
-                    </div>
-
-                    <div className="bg-surface-soft/50 border border-border-main p-4 rounded-2xl">
-                      <p className="text-[7px] font-black uppercase text-text-subtle tracking-[0.2em] mb-1">Valor da Parcela</p>
-                      <h4 className="text-lg font-black italic text-text-main tracking-tighter">
-                        {currentSubscription?.status === 'free' ? 'ISENTO' : `R$ ${currentSubscription?.plan?.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}`}
-                      </h4>
-                      <p className="text-[8px] font-bold text-text-muted uppercase mt-0.5">
-                        Cobrança {currentSubscription?.status === 'free' ? 'N/A' : (currentSubscription?.plan?.billing_period === 'monthly' ? 'Mensal' : 'Recorrente')}
-                      </p>
-                    </div>
-
-                    <div className="bg-surface-soft/50 border border-border-main p-4 rounded-2xl">
-                      <p className="text-[7px] font-black uppercase text-text-subtle tracking-[0.2em] mb-1">Próximo Vencimento</p>
-                      <h4 className="text-lg font-black italic text-text-main tracking-tighter">
-                        {currentSubscription?.status === 'free' ? 'N/A' : (currentSubscription?.next_billing_at ? new Date(currentSubscription.next_billing_at).toLocaleDateString('pt-BR') : (currentSubscription?.due_day ? `DIA ${currentSubscription.due_day}` : '---'))}
-                      </h4>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <div className={cn(
-                          "w-1.5 h-1.5 rounded-full animate-pulse",
-                          currentSubscription?.status === 'free' ? "bg-primary" : (currentSubscription?.status === 'active' ? "bg-emerald-500" : "bg-primary")
-                        )} />
-                        <p className="text-[8px] font-bold text-text-muted uppercase">
-                          {currentSubscription?.status === 'free' ? 'ISENTO' : (currentSubscription?.status === 'active' ? 'Em dia' : 'Aguardando')}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* CARD RESPONSÁVEL */}
-              <div className="bg-surface border border-border-main rounded-[24px] p-6 shadow-sm backdrop-blur-xl">
-                <h3 className="text-[9px] font-black uppercase tracking-[0.2em] text-text-main mb-4 flex items-center gap-2">
-                  <UserIcon className="w-3.5 h-3.5 text-primary" />
-                  Responsável pelo Pagamento
-                </h3>
-
-                <div className="space-y-3">
-                  <div className="p-3 bg-surface-soft border border-border-main rounded-xl">
-                    <p className="text-[6px] font-black text-text-subtle uppercase tracking-widest mb-0.5">Nome Completo</p>
-                    <p className="text-[10px] font-black italic text-text-main uppercase">{currentSubscription?.payer_name || athlete.full_name}</p>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3">
-                    <button
-                      onClick={() => window.open(`https://wa.me/${currentSubscription?.payer_phone?.replace(/\D/g, '') || athlete.whatsapp?.replace(/\D/g, '')}`, '_blank')}
-                      className="flex items-center gap-3 p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl hover:bg-emerald-500/10 transition-all group w-full text-left"
-                    >
-                      <div className="p-1.5 bg-emerald-500/20 rounded-lg group-hover:scale-110 transition-transform">
-                        <MessageSquare className="w-3.5 h-3.5 text-emerald-500" />
-                      </div>
-                      <div>
-                        <p className="text-[6px] font-black text-emerald-600 uppercase tracking-widest">WhatsApp</p>
-                        <p className="text-[10px] font-black italic text-text-main">{currentSubscription?.payer_phone || athlete.whatsapp || 'Não informado'}</p>
-                      </div>
-                    </button>
-
-                    <div className="flex items-center gap-3 p-3 bg-surface-soft border border-border-main rounded-xl group">
-                      <div className="p-1.5 bg-primary/10 rounded-lg">
-                        <Mail className="w-3.5 h-3.5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-[6px] font-black text-text-subtle uppercase tracking-widest">E-mail de Cobrança</p>
-                        <p className="text-[10px] font-black italic text-text-main lowercase truncate max-w-[150px]">
-                          {currentSubscription?.payer_email || athlete.email || 'Não informado'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ALERTAS E HISTÓRICO */}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-              {/* ALERTAS */}
-              <div className="lg:col-span-1 space-y-3">
-                <h3 className="text-[9px] font-black uppercase tracking-[0.2em] text-text-main ml-2 flex items-center gap-2">
-                  <AlertCircle className="w-3.5 h-3.5 text-primary" />
-                  Alertas Financeiros
-                </h3>
-
-                {payments.some(p => p.status === 'overdue') ? (
-                  <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 animate-pulse">
-                    <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
-                    <div>
-                      <h4 className="text-[9px] font-black uppercase text-red-600 mb-0.5">Pagamento Atrasado</h4>
-                      <p className="text-[8px] font-bold text-red-500/80 uppercase leading-relaxed">
-                        Existem faturas pendentes. O acesso do atleta pode ser restrito em breve.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl flex items-start gap-3">
-                    <ShieldCheck className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-                    <div>
-                      <h4 className="text-[9px] font-black uppercase text-emerald-600 mb-0.5">Situação Regular</h4>
-                      <p className="text-[8px] font-bold text-emerald-500/80 uppercase leading-relaxed">
-                        Nenhuma pendência financeira encontrada para este atleta.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="p-4 bg-surface border border-border-main rounded-2xl">
-                  <h4 className="text-[8px] font-black uppercase text-text-main mb-3 border-b border-border-main pb-1.5">Próximas Faturas</h4>
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-2.5 h-2.5 text-text-subtle" />
-                        <span className="text-[9px] font-bold text-text-muted uppercase">
-                          {currentSubscription?.next_billing_at ? new Date(currentSubscription.next_billing_at).toLocaleDateString('pt-BR') : '---'}
-                        </span>
+                    <div className="bg-surface-soft/50 border border-border-main p-2.5 rounded-xl">
+                      <p className="text-[6px] font-black uppercase text-text-subtle tracking-widest mb-0.5">Ativo</p>
+                      <h4 className="text-[11px] font-black italic text-text-main uppercase truncate">
+                        {currentSubscription?.status === 'free' ? 'ISENÇÃO' : (currentSubscription?.plan?.name || 'SEM PLANO')}
+                      </h4>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-surface-soft/50 border border-border-main p-2 rounded-xl text-center">
+                        <p className="text-[6px] font-black uppercase text-text-subtle tracking-widest mb-0.5">Valor</p>
+                        <p className="text-[10px] font-black text-text-main">
+                          {currentSubscription?.status === 'free' ? '0' : `R$ ${currentSubscription?.plan?.amount || 0}`}
+                        </p>
                       </div>
-                      <span className="text-[8px] font-black italic text-primary">R$ {currentSubscription?.plan?.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}</span>
+                      <div className="bg-surface-soft/50 border border-border-main p-2 rounded-xl text-center">
+                        <p className="text-[6px] font-black uppercase text-text-subtle tracking-widest mb-0.5">Venc.</p>
+                        <p className="text-[10px] font-black text-primary">
+                          {currentSubscription?.status === 'free' ? 'N/A' : (currentSubscription?.due_day ? `Dia ${currentSubscription.due_day}` : '---')}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
+
+                {/* RESPONSÁVEL (MUITO COMPACTO) */}
+                <div className="bg-surface border border-border-main rounded-[20px] p-4 shadow-sm">
+                  <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border-main">
+                    <UserIcon className="w-3.5 h-3.5 text-primary" />
+                    <h3 className="text-[10px] font-black uppercase tracking-wider text-text-main">Pagador</h3>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-surface-soft flex items-center justify-center text-[10px] font-black text-text-subtle">
+                        { (currentSubscription?.payer_name || athlete.full_name)?.charAt(0) }
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-black italic text-text-main truncate uppercase">
+                          {currentSubscription?.payer_name || athlete.full_name}
+                        </p>
+                        <p className="text-[7px] font-bold text-text-muted truncate">
+                          {currentSubscription?.payer_email || athlete.email || 'sem e-mail'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const phone = currentSubscription?.payer_phone?.replace(/\D/g, '') || athlete.whatsapp?.replace(/\D/g, '');
+                        if (phone) window.open(`https://wa.me/55${phone}`, '_blank');
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20 hover:bg-emerald-500/10 transition-all text-[8px] font-black uppercase text-emerald-600"
+                    >
+                      <MessageCircle className="w-3 h-3" />
+                      WhatsApp
+                    </button>
+                  </div>
+                </div>
+
+                {/* ALERTAS (MUITO COMPACTO) */}
+                <div className="bg-surface border border-border-main rounded-[20px] p-4 shadow-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="w-3.5 h-3.5 text-primary" />
+                    <h3 className="text-[9px] font-black uppercase tracking-widest text-text-main">Status</h3>
+                  </div>
+                  {payments.some(p => p.status === 'overdue') ? (
+                    <div className="p-2.5 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 animate-pulse">
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
+                      <span className="text-[8px] font-black uppercase text-red-600">Atrasado</span>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 bg-emerald-500/5 border border-emerald-500/10 rounded-xl flex items-center gap-2">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                      <span className="text-[8px] font-black uppercase text-emerald-600">Em dia</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* HISTÓRICO DE PAGAMENTOS */}
-              <div className="lg:col-span-3 bg-surface border border-border-main rounded-[24px] overflow-hidden shadow-sm backdrop-blur-xl">
-                <div className="p-4 border-b border-border-main bg-surface-soft/30 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <History className="w-3.5 h-3.5 text-primary" />
-                    <h3 className="text-[9px] font-black uppercase tracking-[0.2em] text-text-main">Histórico de Pagamentos</h3>
+              {/* HISTÓRICO DE PAGAMENTOS (PRIORIDADE TOTAL) */}
+              <div className="lg:col-span-3 bg-surface border border-border-main rounded-[28px] overflow-hidden shadow-xl border-t-4 border-t-primary/20">
+                <div className="p-5 border-b border-border-main bg-surface-soft/20 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <History className="w-4 h-4 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-text-main leading-none mb-1">Histórico de Faturas</h3>
+                      <p className="text-[7px] font-bold text-text-muted uppercase tracking-widest">Fluxo financeiro detalhado</p>
+                    </div>
                   </div>
-                  <span className="text-[7px] font-black uppercase bg-primary/10 text-primary-dark px-2.5 py-0.5 rounded-full">
-                    {payments.length} Registros
-                  </span>
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <p className="text-[6px] font-black text-text-subtle uppercase">Total</p>
+                      <p className="text-[10px] font-black italic text-text-main">R$ {payments.reduce((acc, p) => acc + Number(p.amount), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    </div>
+                    <span className="text-[8px] font-black uppercase bg-primary text-black px-3 py-1 rounded-full shadow-lg shadow-primary/20">
+                      {payments.length} faturas
+                    </span>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead>
-                      <tr className="border-b border-border-main">
-                        <th className="px-5 py-3 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Fatura</th>
-                        <th className="px-5 py-3 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Vencimento</th>
-                        <th className="px-5 py-3 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Pagamento</th>
-                        <th className="px-5 py-3 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Valor</th>
-                        <th className="px-5 py-3 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Método</th>
-                        <th className="px-5 py-3 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Status</th>
+                      <tr className="bg-surface-soft/10 border-b border-border-main">
+                        <th className="px-6 py-4 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Fatura</th>
+                        <th className="px-6 py-4 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Vencimento</th>
+                        <th className="px-6 py-4 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Valor</th>
+                        <th className="px-6 py-4 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Status</th>
+                        <th className="px-6 py-4 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em] text-center">Ações</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border-main/50">
+                    <tbody className="divide-y divide-border-main/30">
                       {payments.length > 0 ? payments.map((payment) => (
-                        <tr key={payment.id} className="hover:bg-surface-soft/50 transition-colors group">
-                          <td className="px-5 py-3">
-                            <div className="flex items-center gap-1.5">
-                              <Receipt className="w-2.5 h-2.5 text-text-subtle group-hover:text-primary transition-colors" />
+                        <tr key={payment.id} className="hover:bg-primary/5 transition-all group">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-lg bg-surface-soft border border-border-main flex items-center justify-center group-hover:border-primary/30 transition-colors">
+                                <Receipt className="w-3 h-3 text-text-subtle group-hover:text-primary" />
+                              </div>
                               <span className="text-[9px] font-black text-text-main uppercase tracking-tighter">#{payment.id.substring(0, 8)}</span>
                             </div>
                           </td>
-                          <td className="px-5 py-3 text-[9px] font-bold text-text-muted uppercase">
-                            {new Date(payment.due_date).toLocaleDateString('pt-BR')}
+                          <td className="px-6 py-4">
+                            <p className="text-[9px] font-black text-text-main uppercase">{new Date(payment.due_date).toLocaleDateString('pt-BR')}</p>
+                            {payment.paid_at && (
+                              <p className="text-[7px] font-bold text-emerald-500 uppercase mt-0.5">Pago em: {new Date(payment.paid_at).toLocaleDateString('pt-BR')}</p>
+                            )}
                           </td>
-                          <td className="px-5 py-3 text-[9px] font-bold text-text-muted uppercase">
-                            {payment.paid_at ? new Date(payment.paid_at).toLocaleDateString('pt-BR') : '---'}
-                          </td>
-                          <td className="px-5 py-3 text-[9px] font-black italic text-text-main">
-                            R$ {payment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="px-5 py-3">
-                            <span className="text-[7px] font-black uppercase px-1.5 py-0.5 bg-surface-soft border border-border-main rounded-md text-text-subtle">
-                              {payment.payment_method || 'PIX'}
+                          <td className="px-6 py-4">
+                            <span className="text-[10px] font-black italic text-text-main">
+                              R$ {Number(payment.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </span>
                           </td>
-                          <td className="px-5 py-3">
-                            <div className="flex items-center gap-1.5">
+                          <td className="px-6 py-4">
+                            <div className={cn(
+                              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[8px] font-black uppercase italic tracking-widest",
+                              payment.status === 'paid' ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-500" :
+                                payment.status === 'overdue' ? "bg-red-500/5 border-red-500/20 text-red-500" :
+                                  "bg-primary/5 border-primary/20 text-primary-dark"
+                            )}>
                               <div className={cn(
                                 "w-1 h-1 rounded-full",
-                                payment.status === 'paid' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" :
-                                  payment.status === 'overdue' ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" :
-                                    "bg-primary shadow-[0_0_8px_rgba(189,255,1,0.5)]"
+                                payment.status === 'paid' ? "bg-emerald-500" :
+                                  payment.status === 'overdue' ? "bg-red-500" : "bg-primary"
                               )} />
-                              <span className={cn(
-                                "text-[8px] font-black uppercase italic tracking-widest",
-                                payment.status === 'paid' ? "text-emerald-500" :
-                                  payment.status === 'overdue' ? "text-red-500" :
-                                    "text-primary-dark"
-                              )}>
-                                {payment.status === 'paid' ? 'Pago' :
-                                  payment.status === 'overdue' ? 'Atrasado' : 'Aberto'}
-                              </span>
+                              {payment.status === 'paid' ? 'Pago' :
+                                payment.status === 'overdue' ? 'Atrasado' : 'Aberto'}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => {
+                                  const url = payment.checkout_url || `https://checkout.abacatepay.com/pay/${payment.external_id || payment.id}`;
+                                  window.open(url, '_blank');
+                                }}
+                                className="w-8 h-8 rounded-xl bg-surface-soft border border-border-main flex items-center justify-center text-text-muted hover:text-primary hover:border-primary/40 transition-all shadow-sm"
+                                title="Link de Pagamento"
+                              >
+                                <ArrowUpRight className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const amountStr = Number(payment.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                                  const url = payment.checkout_url || `https://checkout.abacatepay.com/pay/${payment.external_id || payment.id}`;
+                                  const clubName = organization?.name || 'Clube';
+                                  const message = `Olá! Aqui está a mensalidade no valor R$ ${amountStr}.\nAcesse o link abaixo e efetue o pagamento:\n\n${url}\n\n- ${clubName}`;
+                                  const phone = currentSubscription?.payer_phone?.replace(/\D/g, '') || athlete.whatsapp?.replace(/\D/g, '');
+                                  window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(message)}`, '_blank');
+                                }}
+                                className="w-8 h-8 rounded-xl bg-emerald-500/5 border border-emerald-500/20 flex items-center justify-center text-emerald-600 hover:bg-emerald-500/10 transition-all shadow-sm"
+                                title="Enviar via WhatsApp"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                              </button>
                             </div>
                           </td>
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan={6} className="px-6 py-12 text-center">
-                            <p className="text-[10px] font-black uppercase text-text-subtle tracking-[0.2em]">Nenhuma fatura registrada</p>
+                          <td colSpan={5} className="px-6 py-12 text-center">
+                            <div className="flex flex-col items-center justify-center opacity-50">
+                              <Receipt className="w-12 h-12 text-text-subtle mb-4" />
+                              <p className="text-[10px] font-black uppercase text-text-subtle tracking-[0.2em]">Nenhuma fatura registrada</p>
+                            </div>
                           </td>
                         </tr>
                       )}
