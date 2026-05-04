@@ -29,10 +29,12 @@ import PublicPerformance from './pages/PublicPerformance';
 import { ThemeProvider } from './context/ThemeContext';
 
 import Checkout from './pages/Checkout';
+import { Toaster } from 'sonner';
 
 export default function App() {
   return (
     <ThemeProvider>
+      <Toaster position="top-right" richColors theme="dark" />
       <AuthProvider>
         <OrgProvider>
         <Router>

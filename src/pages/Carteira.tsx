@@ -3,18 +3,29 @@ import { Wallet, ArrowUpRight, History, ShieldCheck, AlertCircle, CheckCircle2, 
 import { supabase } from '../lib/supabase';
 import { useOrg } from '../context/OrgContext';
 import { cn } from '../lib/utils';
+import { toast } from 'sonner';
+
+const detectPixType = (key: string): string => {
+  const clean = key.replace(/\D/g, '');
+  if (key.includes('@')) return 'EMAIL';
+  if (clean.length === 11) return 'CPF';
+  if (clean.length === 14) return 'CNPJ';
+  if (clean.length >= 10 && clean.length <= 11) return 'PHONE';
+  return 'RANDOM';
+};
 
 interface WalletData {
   id: string; balance: number; pending_balance: number;
   bank_name: string | null; bank_agency: string | null;
   bank_account: string | null; bank_pix_key: string | null; tax_id: string | null;
+  bank_owner_name: string | null;
 }
 interface Withdrawal {
   id: string; amount: number; fee_amount: number; status: string; created_at: string;
 }
 
 type PixType = 'cnpj' | 'email' | 'telefone' | 'aleatoria';
-type VerifyStep = 'form' | 'verifying' | 'verified' | 'error';
+type VerifyStep = 'form' | 'verifying' | 'confirm' | 'verified' | 'error';
 
 const PIX_TYPES: { value: PixType; label: string; mask?: string; placeholder: string }[] = [
   { value: 'cnpj', label: 'CNPJ', placeholder: '00.000.000/0000-00' },
@@ -42,6 +53,13 @@ export default function Carteira() {
   const [pixType, setPixType] = useState<PixType>('cnpj');
   const [pixKey, setPixKey] = useState('');
   const [verifyStep, setVerifyStep] = useState<VerifyStep>('form');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [verifiedData, setVerifiedData] = useState<{
+    ownerName: string;
+    bankName: string;
+    taxId?: string;
+    isReal?: boolean;
+  } | null>(null);
 
   useEffect(() => { if (organization) fetchWalletData(); }, [organization]);
 
@@ -57,16 +75,20 @@ export default function Carteira() {
       setWithdrawals(wd || []);
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
+
+  // Cálculo do saldo efetivamente disponível (subtraindo saques pendentes)
+  const pendingWithdrawalsAmount = withdrawals
+    .filter(w => w.status === 'pending')
+    .reduce((sum, w) => sum + w.amount, 0);
+
+  const effectiveBalance = Math.max(0, (wallet?.balance || 0) - pendingWithdrawalsAmount);
   const handleVerifyAndSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wallet) return;
     setVerifyStep('verifying');
     
-    // Simulação de verificação real com delay
-    await new Promise(r => setTimeout(r, 1500));
-
-    const orgCnpj = (organization?.cnpj || organization?.settings?.cnpj || organization?.settings?.tax_id)?.replace(/\D/g, '') || '';
-    const cleanPixKey = pixKey.replace(/\D/g, '');
+    const cleanPixKey = pixKey.trim();
+    const pureKey = pixKey.replace(/\D/g, '');
     
     // 1. Validação de Formato Real (Regex)
     const pixRegex = {
@@ -76,47 +98,100 @@ export default function Carteira() {
       aleatoria: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     };
 
-    const isValidFormat = pixType === 'email' ? pixRegex.email.test(pixKey) : 
-                        pixType === 'cnpj' ? pixRegex.cnpj.test(cleanPixKey) :
-                        pixType === 'telefone' ? pixRegex.telefone.test(cleanPixKey) :
-                        pixRegex.aleatoria.test(pixKey);
+    const isValidFormat = pixType === 'email' ? pixRegex.email.test(cleanPixKey) : 
+                        pixType === 'cnpj' ? pixRegex.cnpj.test(pureKey) :
+                        pixType === 'telefone' ? pixRegex.telefone.test(pureKey) :
+                        pixRegex.aleatoria.test(cleanPixKey);
 
     if (!isValidFormat) {
-      alert(`Formato de chave ${pixType.toUpperCase()} inválido.`);
+      toast.error(`Formato de chave ${pixType.toUpperCase()} inválido.`);
       setVerifyStep('form');
       return;
     }
 
-    // 2. Validação de Titularidade (Se for CNPJ, deve ser o do Clube)
-    if (pixType === 'cnpj' && orgCnpj && cleanPixKey !== orgCnpj) {
-      setVerifyStep('error'); return;
-    }
-
-    // 3. Se o clube não tiver CNPJ, não podemos validar titularidade de forma automática para outras chaves, 
-    // mas salvamos o CNPJ do clube como o tax_id do recebedor
     try {
-      await supabase!.from('wallets').update({ 
-        bank_pix_key: pixKey, 
-        tax_id: orgCnpj || null // Vincula automaticamente ao CNPJ do clube
+      // 1. Salvar diretamente no banco de dados para o MVP
+      const keyToSend = (pixType === 'cnpj' || pixType === 'telefone') ? pureKey : cleanPixKey;
+      const orgCnpj = (organization?.cnpj || organization?.settings?.cnpj || organization?.settings?.tax_id)?.replace(/\D/g, '') || '';
+      
+      const { error } = await supabase!.from('wallets').update({ 
+        bank_pix_key: keyToSend,
+        bank_owner_name: organization?.name || 'Clube',
+        bank_name: 'Instituição PIX',
+        tax_id: orgCnpj || null
       }).eq('id', wallet.id);
       
+      if (error) throw error;
+
+      setVerifiedData({
+        ownerName: organization?.name || 'Clube',
+        bankName: 'Instituição PIX',
+        taxId: orgCnpj || '',
+        isReal: false
+      });
+      
       setVerifyStep('verified');
-      setTimeout(() => { setIsPixModalOpen(false); fetchWalletData(); setVerifyStep('form'); }, 1500);
-    } catch { setVerifyStep('error'); }
+      toast.success('Chave PIX registrada com sucesso!');
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err.message || 'Erro ao salvar a chave PIX.');
+      setVerifyStep('error');
+    }
+  };
+
+  const handleConfirmSave = async () => {
+    if (!wallet || !verifiedData) return;
+    setVerifyStep('verifying');
+
+    const orgCnpj = (organization?.cnpj || organization?.settings?.cnpj || organization?.settings?.tax_id)?.replace(/\D/g, '') || '';
+
+    try {
+      const { error } = await supabase!.from('wallets').update({ 
+        bank_pix_key: pixKey, 
+        bank_name: verifiedData.bankName,
+        bank_owner_name: verifiedData.ownerName,
+        tax_id: orgCnpj || verifiedData.taxId || null
+      }).eq('id', wallet.id);
+      
+      if (error) throw error;
+
+      setVerifyStep('verified');
+      toast.success('Dados da carteira atualizados!');
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err.message || 'Erro ao salvar os dados da carteira.');
+      setVerifyStep('error');
+    }
   };
 
   const handleRequestWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wallet) return;
-    const amount = parseFloat(withdrawAmount);
-    if (amount > wallet.balance) { alert('Saldo insuficiente'); return; }
-    if (!wallet.bank_pix_key) { alert('Cadastre uma chave PIX primeiro'); return; }
+    if (!wallet.bank_pix_key) { 
+      toast.error('Cadastre uma chave PIX primeiro'); 
+      return; 
+    }
+    
+    const cleanAmount = parseFloat(withdrawAmount.replace(/\./g, '').replace(',', '.'));
+    
+    if (cleanAmount < 5) {
+      toast.error('O valor mínimo para saque é de R$ 5,00.');
+      return;
+    }
+
+    if (cleanAmount > effectiveBalance) {
+      toast.error('Saldo insuficiente para realizar este saque (considere saques pendentes).');
+      return;
+    }
+
     setIsSaving(true);
+    const toastId = toast.loading('Processando seu saque automático...');
+
     try {
-      const fee = 6.90;
-      const totalAmount = amount; // O clube retira 'amount' do saldo da carteira
-      
-      // 1. Criar solicitação de saque
+      const fee = 0.00; // Taxa zerada para testes
+      const totalAmount = cleanAmount;
+
+      // 1. Criar registro de saque pendente
       const { data: wd, error: wdError } = await supabase!
         .from('wallet_withdrawals')
         .insert({ 
@@ -131,25 +206,30 @@ export default function Carteira() {
 
       if (wdError) throw wdError;
 
-      // 2. Atualizar saldo da carteira (subtrair o valor do saque)
-      const { error: walletError } = await supabase!
-        .from('wallets')
-        .update({ 
-          balance: wallet.balance - totalAmount 
-        })
-        .eq('id', wallet.id);
+      // 2. Chamar a Edge Function para processar o payout automático no AbacatePay
+      const { data: payoutResponse, error: payoutError } = await supabase!.functions.invoke('process-payout', {
+        body: {
+          walletId: wallet.id,
+          withdrawalId: wd.id,
+          amount: totalAmount,
+          pixKey: wallet.bank_pix_key,
+          pixKeyType: detectPixType(wallet.bank_pix_key)
+        }
+      });
 
-      if (walletError) throw walletError;
+      if (payoutError || (payoutResponse && !payoutResponse.success)) {
+        throw new Error(payoutResponse?.error || payoutError?.message || 'Erro ao processar pagamento automático');
+      }
 
       // 3. Registrar no Fluxo de Caixa como Despesa (Saída)
       await supabase!
         .from('financial_transactions')
         .insert({
           organization_id: organization!.id,
-          title: `Saque solicitado (Chave: ${wallet.bank_pix_key})`,
+          title: `Saque Automático (Chave: ${wallet.bank_pix_key})`,
           amount: totalAmount,
           type: 'expense',
-          status: 'pending',
+          status: 'completed',
           date: new Date().toISOString().split('T')[0],
           responsible_name: organization!.name
         });
@@ -157,10 +237,10 @@ export default function Carteira() {
       setWithdrawAmount('');
       setIsWithdrawModalOpen(false); 
       fetchWalletData();
-      alert('Solicitação de saque enviada com sucesso! O valor será processado em até 24h.');
-    } catch (err) { 
+      toast.success('Saque realizado com sucesso! O dinheiro já foi enviado via PIX.', { id: toastId });
+    } catch (err: any) { 
       console.error(err);
-      alert('Erro ao solicitar saque. Verifique sua conexão.'); 
+      toast.error(err.message || 'Erro ao processar saque. Tente novamente mais tarde.', { id: toastId }); 
     } finally { 
       setIsSaving(false); 
     }
@@ -218,12 +298,17 @@ export default function Carteira() {
                   <CheckCircle2 size={10} /> Saldo Disponível
                 </p>
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl font-black italic tracking-tighter text-[var(--text)]">R$ {fmt(wallet?.balance || 0)}</span>
+                  <span className="text-2xl font-black italic tracking-tighter text-[var(--text)]">R$ {fmt(effectiveBalance)}</span>
                   <div className="px-2 py-0.5 bg-primary text-black rounded-full text-[7px] font-black uppercase tracking-widest">
                     Livre
                   </div>
                 </div>
                 <p className="text-[7px] font-bold text-primary/70 uppercase tracking-wider">Pronto para saque</p>
+                {pendingWithdrawalsAmount > 0 && (
+                  <p className="text-[7px] font-bold text-amber-500 uppercase tracking-wider mt-1">
+                    (- R$ {fmt(pendingWithdrawalsAmount)} pendentes)
+                  </p>
+                )}
               </div>
 
               {/* Pending Balance */}
@@ -291,9 +376,26 @@ export default function Carteira() {
                     <p className="text-[10px] font-black uppercase text-primary italic">PIX Verificado</p>
                   </div>
                   <p className="text-[10px] font-bold text-[var(--text)] break-all">{wallet?.bank_pix_key}</p>
-                  <div className="pt-1 border-t border-primary/10">
-                    <p className="text-[8px] font-black text-[var(--text-muted)] uppercase">CNPJ do Titular</p>
-                    <p className="text-[10px] font-bold text-[var(--text)]">{wallet?.tax_id}</p>
+                  
+                  <div className="pt-2 border-t border-primary/10 space-y-2">
+                    <div className="flex flex-col">
+                      <span className="text-[8px] font-black text-[var(--text-muted)] uppercase">Titular</span>
+                      <span className="text-[10px] font-bold text-[var(--text)] uppercase italic leading-tight">
+                        {wallet?.bank_owner_name || 'NÃO IDENTIFICADO'}
+                      </span>
+                    </div>
+                    
+                    <div className="flex flex-col">
+                      <span className="text-[8px] font-black text-[var(--text-muted)] uppercase">Instituição</span>
+                      <span className="text-[10px] font-bold text-[var(--text)] uppercase italic leading-tight">
+                        {wallet?.bank_name || 'NÃO IDENTIFICADO'}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col">
+                      <span className="text-[8px] font-black text-[var(--text-muted)] uppercase">Documento do Titular</span>
+                      <span className="text-[10px] font-bold text-[var(--text)]">{wallet?.tax_id || 'NÃO INFORMADO'}</span>
+                    </div>
                   </div>
                 </div>
                 <button onClick={() => setIsPixModalOpen(true)} className="w-full py-2.5 text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary/10 rounded-xl transition-all">
@@ -335,7 +437,7 @@ export default function Carteira() {
               <div className="space-y-1">
                 <p className="text-[9px] font-black uppercase text-[var(--text)]">3. Payout</p>
                 <p className="text-[8px] font-bold text-[var(--text-muted)] leading-relaxed">
-                  O valor líquido (descontada a taxa de R$ 6,90) é enviado para sua conta em até 24h úteis.
+                  O valor líquido (descontada a taxa de R$ 0,80) é enviado para sua conta. Valor mínimo de R$ 5,00.
                 </p>
               </div>
             </div>
@@ -367,10 +469,102 @@ export default function Carteira() {
               </div>
             )}
 
-            {verifyStep === 'verified' && (
-              <div className="p-10 flex flex-col items-center gap-4">
-                <CheckCircle2 className="text-primary" size={48} />
-                <p className="text-[11px] font-black uppercase tracking-widest text-primary">Chave PIX verificada!</p>
+            {verifyStep === 'verified' && verifiedData && (
+              <div className="p-6 space-y-5">
+                <div className="flex flex-col items-center gap-3 py-4">
+                  <div className="p-3 bg-primary/10 text-primary rounded-full">
+                    <CheckCircle2 size={32} />
+                  </div>
+                  <h2 className="text-[11px] font-black uppercase tracking-widest text-primary">CHAVE PIX REGISTRADA!</h2>
+                  <p className="text-[9px] text-[var(--text-muted)] font-bold uppercase tracking-widest text-center">Sua chave foi salva com sucesso e já está pronta para uso</p>
+                </div>
+
+                <div className="bg-[var(--surface-soft)]/30 rounded-2xl p-5 border border-[var(--border)]">
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Titular</p>
+                      <p className="text-xs font-black text-[var(--text)] italic uppercase leading-tight">{verifiedData.ownerName}</p>
+                    </div>
+                    <div>
+                      <p className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Instituição</p>
+                      <p className="text-xs font-black text-[var(--text)] italic uppercase leading-tight">{verifiedData.bankName}</p>
+                    </div>
+                    <div>
+                      <p className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Documento do Titular</p>
+                      <p className="text-xs font-bold text-[var(--text)]">{verifiedData.taxId || 'NÃO IDENTIFICADO'}</p>
+                    </div>
+                    <div className="pt-3 border-t border-[var(--border)]">
+                      <p className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Chave PIX</p>
+                      <p className="text-[10px] font-bold text-primary break-all">{pixKey}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => {
+                    setIsPixModalOpen(false);
+                    fetchWalletData();
+                    setVerifyStep('form');
+                    setVerifiedData(null);
+                  }} 
+                  className="w-full py-4 bg-primary text-black rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all"
+                >
+                  Confirmar
+                </button>
+              </div>
+            )}
+
+            {verifyStep === 'confirm' && verifiedData && (
+              <div className="p-6 space-y-5">
+                <div className="bg-primary/5 border border-primary/20 rounded-2xl p-5 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary text-black rounded-xl">
+                      <CheckCircle2 size={18} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase text-primary italic">Dados Identificados</p>
+                      <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-widest">Confirme se as informações estão corretas</p>
+                    </div>
+                  </div>
+                  <div className="bg-[var(--surface-soft)]/30 rounded-2xl p-5 border border-[var(--border)]">
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Titular</p>
+                        <p className="text-xs font-black text-[var(--text)] italic uppercase leading-tight">{verifiedData.ownerName}</p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Instituição</p>
+                        <p className="text-xs font-black text-[var(--text)] italic uppercase leading-tight">{verifiedData.bankName}</p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Documento do Titular</p>
+                        <p className="text-xs font-bold text-[var(--text)]">{verifiedData.taxId || 'NÃO IDENTIFICADO'}</p>
+                      </div>
+                      <div className="pt-3 border-t border-[var(--border)]">
+                        <p className="text-[8px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Chave PIX</p>
+                        <p className="text-[10px] font-bold text-primary break-all">{pixKey}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {!verifiedData.isReal && (
+                  <div className="flex items-start gap-3 p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
+                    <Info size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                    <p className="text-[9px] text-amber-700 dark:text-amber-400 font-semibold leading-relaxed">
+                      <strong>Aviso:</strong> Verificação em modo de compatibilidade. Certifique-se de que os dados acima pertencem ao clube.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button onClick={() => setVerifyStep('form')} className="flex-1 py-3.5 bg-[var(--surface-soft)] text-[var(--text-muted)] rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-[var(--surface-soft)]/80 transition-all">
+                    Corrigir
+                  </button>
+                  <button onClick={handleConfirmSave} className="flex-1 py-3.5 bg-primary text-black rounded-2xl text-[9px] font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all">
+                    Confirmar
+                  </button>
+                </div>
               </div>
             )}
 
@@ -379,12 +573,14 @@ export default function Carteira() {
                 <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl">
                   <AlertCircle size={20} className="text-red-500 shrink-0" />
                   <div>
-                    <p className="text-[10px] font-black text-red-500 uppercase">CNPJ não corresponde</p>
-                    <p className="text-[9px] text-[var(--text-muted)] font-medium mt-1">O CNPJ da chave PIX deve ser o mesmo cadastrado no clube.</p>
+                    <p className="text-[10px] font-black text-red-500 uppercase">Falha na Verificação</p>
+                    <p className="text-[9px] text-[var(--text-muted)] font-medium mt-1">
+                      {errorMessage || 'Não foi possível validar esta chave PIX. Verifique se os dados estão corretos e tente novamente.'}
+                    </p>
                   </div>
                 </div>
                 <button onClick={() => setVerifyStep('form')} className="w-full py-3 bg-[var(--surface-soft)] text-[var(--text)] rounded-2xl text-[9px] font-black uppercase">
-                  Tentar Novamente
+                  Voltar ao Início
                 </button>
               </div>
             )}
@@ -433,7 +629,7 @@ export default function Carteira() {
                 </div>
 
                 <button type="submit" className="w-full py-3.5 bg-primary text-black rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
-                  <ShieldCheck size={14} /> Verificar e Salvar
+                  <ShieldCheck size={14} /> Salvar Chave PIX
                 </button>
               </form>
             )}
@@ -466,12 +662,19 @@ export default function Carteira() {
                 <div className="flex items-center justify-center gap-3">
                   <span className="text-2xl font-black text-primary italic">R$</span>
                   <input
-                    type="number" step="0.01" min="0.01"
-                    max={wallet?.balance || 0}
+                    type="text"
                     value={withdrawAmount}
-                    onChange={e => setWithdrawAmount(e.target.value)}
+                    onChange={e => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      const amount = parseFloat(val) / 100;
+                      if (isNaN(amount)) {
+                        setWithdrawAmount('0,00');
+                      } else {
+                        setWithdrawAmount(amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                      }
+                    }}
                     required
-                    className="bg-transparent border-b-2 border-primary text-4xl font-black text-[var(--text)] italic outline-none w-44 text-center placeholder-[var(--text-subtle)]"
+                    className="bg-transparent border-b-2 border-primary text-4xl font-black text-[var(--text)] italic outline-none w-56 text-center placeholder-[var(--text-subtle)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     placeholder="0,00"
                   />
                 </div>
@@ -480,17 +683,17 @@ export default function Carteira() {
                 <div className="space-y-1.5 pt-1">
                   <div className="flex justify-between text-[8px] font-black uppercase text-[var(--text-muted)]">
                     <span>Disponível para saque</span>
-                    <span className="text-primary">R$ {fmt(wallet?.balance || 0)}</span>
+                    <span className="text-primary">R$ {fmt(effectiveBalance)}</span>
                   </div>
                   <div className="w-full h-1.5 bg-[var(--border)] rounded-full overflow-hidden">
                     <div
                       className="h-full bg-primary rounded-full transition-all duration-300"
-                      style={{ width: wallet?.balance ? `${Math.min(100, (parseFloat(withdrawAmount || '0') / wallet.balance) * 100)}%` : '0%' }}
+                      style={{ width: effectiveBalance ? `${Math.min(100, (parseFloat(withdrawAmount.replace(/\./g, '').replace(',', '.') || '0') / effectiveBalance) * 100)}%` : '0%' }}
                     />
                   </div>
                   <div className="flex justify-between text-[8px] font-medium text-[var(--text-muted)]">
                     <span>R$ 0,00</span>
-                    <span>R$ {fmt(wallet?.balance || 0)}</span>
+                    <span>R$ {fmt(effectiveBalance)}</span>
                   </div>
                 </div>
               </div>
@@ -500,20 +703,28 @@ export default function Carteira() {
                 <div className="px-4 py-3 flex justify-between items-center border-b border-[var(--border)]">
                   <span className="text-[9px] font-black uppercase text-[var(--text-muted)]">Valor solicitado</span>
                   <span className="text-[11px] font-black text-[var(--text)]">
-                    R$ {fmt(parseFloat(withdrawAmount || '0'))}
+                    R$ {withdrawAmount || '0,00'}
                   </span>
                 </div>
                 <div className="px-4 py-3 flex justify-between items-center border-b border-[var(--border)]">
                   <span className="text-[9px] font-black uppercase text-[var(--text-muted)]">Taxa de serviço</span>
-                  <span className="text-[11px] font-black text-red-400">- R$ 6,90</span>
+                  <span className="text-[11px] font-black text-red-400">- R$ 0,00</span>
                 </div>
                 <div className="px-4 py-3 flex justify-between items-center bg-primary/5">
                   <span className="text-[9px] font-black uppercase text-primary">Você receberá</span>
                   <span className="text-base font-black text-primary italic">
-                    R$ {fmt(Math.max(0, parseFloat(withdrawAmount || '0') - 6.90))}
+                    R$ {withdrawAmount || '0,00'}
                   </span>
                 </div>
               </div>
+
+              {/* Insufficient Balance Alert */}
+              {parseFloat(withdrawAmount.replace(/\./g, '').replace(',', '.') || '0') > (wallet?.balance || 0) && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-2">
+                  <AlertCircle size={14} className="text-red-500 shrink-0" />
+                  <p className="text-[9px] font-black text-red-500 uppercase tracking-widest">Saldo insuficiente para saque</p>
+                </div>
+              )}
 
               {/* PIX destination */}
               {isConfigured && (
@@ -533,14 +744,14 @@ export default function Carteira() {
                 </div>
               )}
 
-              <div className="flex gap-3">
-                <button type="button" onClick={() => setIsWithdrawModalOpen(false)}
-                  className="flex-1 py-3.5 bg-[var(--surface-soft)] text-[var(--text-muted)] rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-[var(--surface-soft)]/80 transition-all">
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setIsWithdrawModalOpen(false)} className="flex-1 py-4 bg-[var(--surface-soft)] text-[var(--text-muted)] rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-[var(--surface-soft)]/80 transition-all">
                   Cancelar
                 </button>
-                <button type="submit" disabled={isSaving || !isConfigured || !withdrawAmount || parseFloat(withdrawAmount) <= 0}
-                  className="flex-1 py-3.5 bg-primary text-black rounded-2xl text-[9px] font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                  {isSaving ? <Loader2 className="animate-spin" size={14} /> : <><ArrowUpRight size={14} strokeWidth={3} /> Confirmar Saque</>}
+                <button type="submit" disabled={isSaving || !isConfigured || !withdrawAmount || parseFloat(withdrawAmount.replace(/\./g, '').replace(',', '.')) < 5 || parseFloat(withdrawAmount.replace(/\./g, '').replace(',', '.')) > effectiveBalance}
+                  className="flex-1 py-4 bg-primary text-black rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] disabled:opacity-50 disabled:grayscale disabled:scale-100 transition-all flex items-center justify-center gap-2">
+                  {isSaving ? <Loader2 className="animate-spin" size={16} /> : <><ArrowUpRight size={16} /> Confirmar Saque</>}
                 </button>
               </div>
             </form>
