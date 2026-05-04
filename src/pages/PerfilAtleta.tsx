@@ -287,19 +287,6 @@ export default function PerfilAtleta() {
 
   const handleSaveSubscription = async () => {
     try {
-      // Pedir confirmação se estiver alterando plano ou criando um novo pago
-      if (!isFree && selectedPlanId !== currentSubscription?.plan_id) {
-        openConfirmModal({
-          title: "Confirmar Mensalidade?",
-          description: `Você está atribuindo o plano ao atleta. O sistema irá gerar a primeira cobrança com vencimento no dia ${dueDay}.`,
-          type: "warning",
-          onConfirm: async () => {
-            await executeSaveSubscription();
-          }
-        });
-        return;
-      }
-      
       await executeSaveSubscription();
     } catch (err: any) {
       showToast(err.message, 'error');
@@ -395,19 +382,18 @@ export default function PerfilAtleta() {
   };
 
   const handleConfirmSaveSubscription = () => {
-    if (currentSubscription) {
-      openConfirmModal({
-        title: "Alterar Plano?",
-        description: "Você está prestes a alterar o plano deste atleta. Novas cobranças serão geradas com base nos novos valores.",
-        type: "warning",
-        onConfirm: () => {
-          setIsConfirmModalOpen(false);
-          handleSaveSubscription();
-        }
-      });
-    } else {
-      handleSaveSubscription();
-    }
+    const selectedPlan = memberships.flatMap(m => m.plans).find(p => p.id === selectedPlanId);
+    const planName = isFree ? 'ISENÇÃO (GRATUITO)' : selectedPlan?.name || '---';
+
+    openConfirmModal({
+      title: "Confirmar Alteração?",
+      description: `Você está definindo o plano "${planName}" com vencimento todo dia ${dueDay}. Deseja prosseguir com a ativação?`,
+      type: "warning",
+      onConfirm: () => {
+        setIsConfirmModalOpen(false);
+        handleSaveSubscription();
+      }
+    });
   };
 
   const fetchMemberships = async () => {
@@ -846,31 +832,31 @@ export default function PerfilAtleta() {
 
         {/* ABA FINANCEIRO */}
         {activeTab === 'financeiro' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {/* CARD MENSALIDADE ATIVA */}
-              <div className="lg:col-span-2 bg-surface border border-border-main rounded-[32px] p-8 shadow-sm relative overflow-hidden group backdrop-blur-xl">
-                <div className="absolute top-0 right-0 p-8">
-                  <CreditCard className="w-24 h-24 text-primary/5 -rotate-12 absolute -top-4 -right-4" />
+              <div className="lg:col-span-2 bg-surface border border-border-main rounded-[24px] p-6 shadow-sm relative overflow-hidden group backdrop-blur-xl">
+                <div className="absolute top-0 right-0 p-6">
+                  <CreditCard className="w-16 h-16 text-primary/5 -rotate-12 absolute -top-2 -right-2" />
                 </div>
 
                 <div className="relative z-10">
-                  <div className="flex items-center justify-between mb-10">
-                    <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-                        <Zap className="w-7 h-7 text-primary" />
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+                        <Zap className="w-5 h-5 text-primary" />
                       </div>
                       <div>
-                        <h3 className="text-sm font-black uppercase tracking-[0.2em] text-text-main italic">Assinatura Ativa</h3>
-                        <p className="text-[10px] font-bold text-text-subtle uppercase tracking-widest">Status do Plano</p>
+                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-text-main italic">Assinatura Ativa</h3>
+                        <p className="text-[9px] font-bold text-text-subtle uppercase tracking-widest">Status do Plano</p>
                       </div>
                     </div>
-                    <div className="flex gap-3">
+                    <div className="flex gap-2">
                       <button
                         onClick={() => setIsMembershipModalOpen(true)}
-                        className="px-6 py-2.5 rounded-xl bg-surface-soft border border-border-main hover:border-primary/40 transition-all text-[10px] font-black uppercase tracking-widest text-text-main flex items-center gap-2"
+                        className="px-4 py-2 rounded-lg bg-surface-soft border border-border-main hover:border-primary/40 transition-all text-[9px] font-black uppercase tracking-widest text-text-main flex items-center gap-2"
                       >
-                        <Edit3 className="w-3.5 h-3.5 text-primary" />
+                        <Edit3 className="w-3 h-3 text-primary" />
                         Alterar Plano
                       </button>
                       <button
@@ -880,46 +866,46 @@ export default function PerfilAtleta() {
                           type: "danger",
                           onConfirm: handleCancelSubscription
                         })}
-                        className="px-6 py-2.5 rounded-xl bg-red-500/5 border border-red-500/20 hover:bg-red-500/10 transition-all text-[10px] font-black uppercase tracking-widest text-red-500 flex items-center gap-2"
+                        className="px-4 py-2 rounded-lg bg-red-500/5 border border-red-500/20 hover:bg-red-500/10 transition-all text-[9px] font-black uppercase tracking-widest text-red-500 flex items-center gap-2"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3 h-3" />
                         Cancelar
                       </button>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div className="bg-surface-soft/50 border border-border-main p-6 rounded-[24px]">
-                      <p className="text-[8px] font-black uppercase text-text-subtle tracking-[0.2em] mb-2">Plano Atual</p>
-                      <h4 className="text-xl font-black italic text-text-main uppercase tracking-tighter leading-tight">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-surface-soft/50 border border-border-main p-4 rounded-2xl">
+                      <p className="text-[7px] font-black uppercase text-text-subtle tracking-[0.2em] mb-1">Plano Atual</p>
+                      <h4 className="text-base font-black italic text-text-main uppercase tracking-tighter leading-tight">
                         {currentSubscription?.status === 'free' ? 'PLANO DE ISENÇÃO' : (currentSubscription?.plan?.membership?.name || 'Clube')}
                       </h4>
-                      <p className="text-xs font-bold text-primary uppercase mt-1">
+                      <p className="text-[10px] font-bold text-primary uppercase mt-0.5">
                         {currentSubscription?.status === 'free' ? 'ISENÇÃO TOTAL' : (currentSubscription?.plan?.name || 'Sem Plano Ativo')}
                       </p>
                     </div>
 
-                    <div className="bg-surface-soft/50 border border-border-main p-6 rounded-[24px]">
-                      <p className="text-[8px] font-black uppercase text-text-subtle tracking-[0.2em] mb-2">Valor da Parcela</p>
-                      <h4 className="text-2xl font-black italic text-text-main tracking-tighter">
+                    <div className="bg-surface-soft/50 border border-border-main p-4 rounded-2xl">
+                      <p className="text-[7px] font-black uppercase text-text-subtle tracking-[0.2em] mb-1">Valor da Parcela</p>
+                      <h4 className="text-lg font-black italic text-text-main tracking-tighter">
                         {currentSubscription?.status === 'free' ? 'ISENTO' : `R$ ${currentSubscription?.plan?.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}`}
                       </h4>
-                      <p className="text-[9px] font-bold text-text-muted uppercase mt-1">
+                      <p className="text-[8px] font-bold text-text-muted uppercase mt-0.5">
                         Cobrança {currentSubscription?.status === 'free' ? 'N/A' : (currentSubscription?.plan?.billing_period === 'monthly' ? 'Mensal' : 'Recorrente')}
                       </p>
                     </div>
 
-                    <div className="bg-surface-soft/50 border border-border-main p-6 rounded-[24px]">
-                      <p className="text-[8px] font-black uppercase text-text-subtle tracking-[0.2em] mb-2">Próximo Vencimento</p>
-                      <h4 className="text-2xl font-black italic text-text-main tracking-tighter">
+                    <div className="bg-surface-soft/50 border border-border-main p-4 rounded-2xl">
+                      <p className="text-[7px] font-black uppercase text-text-subtle tracking-[0.2em] mb-1">Próximo Vencimento</p>
+                      <h4 className="text-lg font-black italic text-text-main tracking-tighter">
                         {currentSubscription?.status === 'free' ? 'N/A' : (currentSubscription?.next_billing_at ? new Date(currentSubscription.next_billing_at).toLocaleDateString('pt-BR') : (currentSubscription?.due_day ? `DIA ${currentSubscription.due_day}` : '---'))}
                       </h4>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-1.5 mt-0.5">
                         <div className={cn(
-                          "w-2 h-2 rounded-full animate-pulse",
+                          "w-1.5 h-1.5 rounded-full animate-pulse",
                           currentSubscription?.status === 'free' ? "bg-primary" : (currentSubscription?.status === 'active' ? "bg-emerald-500" : "bg-primary")
                         )} />
-                        <p className="text-[9px] font-bold text-text-muted uppercase">
+                        <p className="text-[8px] font-bold text-text-muted uppercase">
                           {currentSubscription?.status === 'free' ? 'ISENTO' : (currentSubscription?.status === 'active' ? 'Em dia' : 'Aguardando')}
                         </p>
                       </div>
@@ -929,39 +915,39 @@ export default function PerfilAtleta() {
               </div>
 
               {/* CARD RESPONSÁVEL */}
-              <div className="bg-surface border border-border-main rounded-[32px] p-8 shadow-sm backdrop-blur-xl">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-main mb-6 flex items-center gap-2">
-                  <UserIcon className="w-4 h-4 text-primary" />
+              <div className="bg-surface border border-border-main rounded-[24px] p-6 shadow-sm backdrop-blur-xl">
+                <h3 className="text-[9px] font-black uppercase tracking-[0.2em] text-text-main mb-4 flex items-center gap-2">
+                  <UserIcon className="w-3.5 h-3.5 text-primary" />
                   Responsável pelo Pagamento
                 </h3>
 
-                <div className="space-y-5">
-                  <div className="p-4 bg-surface-soft border border-border-main rounded-2xl">
-                    <p className="text-[7px] font-black text-text-subtle uppercase tracking-widest mb-1">Nome Completo</p>
-                    <p className="text-xs font-black italic text-text-main uppercase">{currentSubscription?.payer_name || athlete.full_name}</p>
+                <div className="space-y-3">
+                  <div className="p-3 bg-surface-soft border border-border-main rounded-xl">
+                    <p className="text-[6px] font-black text-text-subtle uppercase tracking-widest mb-0.5">Nome Completo</p>
+                    <p className="text-[10px] font-black italic text-text-main uppercase">{currentSubscription?.payer_name || athlete.full_name}</p>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4">
+                  <div className="grid grid-cols-1 gap-3">
                     <button
                       onClick={() => window.open(`https://wa.me/${currentSubscription?.payer_phone?.replace(/\D/g, '') || athlete.whatsapp?.replace(/\D/g, '')}`, '_blank')}
-                      className="flex items-center gap-3 p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl hover:bg-emerald-500/10 transition-all group w-full text-left"
+                      className="flex items-center gap-3 p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl hover:bg-emerald-500/10 transition-all group w-full text-left"
                     >
-                      <div className="p-2 bg-emerald-500/20 rounded-lg group-hover:scale-110 transition-transform">
-                        <MessageSquare className="w-4 h-4 text-emerald-500" />
+                      <div className="p-1.5 bg-emerald-500/20 rounded-lg group-hover:scale-110 transition-transform">
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-500" />
                       </div>
                       <div>
-                        <p className="text-[7px] font-black text-emerald-600 uppercase tracking-widest">WhatsApp</p>
-                        <p className="text-xs font-black italic text-text-main">{currentSubscription?.payer_phone || athlete.whatsapp || 'Não informado'}</p>
+                        <p className="text-[6px] font-black text-emerald-600 uppercase tracking-widest">WhatsApp</p>
+                        <p className="text-[10px] font-black italic text-text-main">{currentSubscription?.payer_phone || athlete.whatsapp || 'Não informado'}</p>
                       </div>
                     </button>
 
-                    <div className="flex items-center gap-3 p-4 bg-surface-soft border border-border-main rounded-2xl group">
-                      <div className="p-2 bg-primary/10 rounded-lg">
-                        <Mail className="w-4 h-4 text-primary" />
+                    <div className="flex items-center gap-3 p-3 bg-surface-soft border border-border-main rounded-xl group">
+                      <div className="p-1.5 bg-primary/10 rounded-lg">
+                        <Mail className="w-3.5 h-3.5 text-primary" />
                       </div>
                       <div>
-                        <p className="text-[7px] font-black text-text-subtle uppercase tracking-widest">E-mail de Cobrança</p>
-                        <p className="text-xs font-black italic text-text-main lowercase truncate max-w-[180px]">
+                        <p className="text-[6px] font-black text-text-subtle uppercase tracking-widest">E-mail de Cobrança</p>
+                        <p className="text-[10px] font-black italic text-text-main lowercase truncate max-w-[150px]">
                           {currentSubscription?.payer_email || athlete.email || 'Não informado'}
                         </p>
                       </div>
@@ -972,60 +958,60 @@ export default function PerfilAtleta() {
             </div>
 
             {/* ALERTAS E HISTÓRICO */}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
               {/* ALERTAS */}
-              <div className="lg:col-span-1 space-y-4">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-main ml-2 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-primary" />
+              <div className="lg:col-span-1 space-y-3">
+                <h3 className="text-[9px] font-black uppercase tracking-[0.2em] text-text-main ml-2 flex items-center gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 text-primary" />
                   Alertas Financeiros
                 </h3>
 
                 {payments.some(p => p.status === 'overdue') ? (
-                  <div className="p-5 bg-red-500/10 border border-red-500/20 rounded-[24px] flex items-start gap-4 animate-pulse">
-                    <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0" />
+                  <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 animate-pulse">
+                    <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
                     <div>
-                      <h4 className="text-[10px] font-black uppercase text-red-600 mb-1">Pagamento Atrasado</h4>
-                      <p className="text-[9px] font-bold text-red-500/80 uppercase leading-relaxed">
+                      <h4 className="text-[9px] font-black uppercase text-red-600 mb-0.5">Pagamento Atrasado</h4>
+                      <p className="text-[8px] font-bold text-red-500/80 uppercase leading-relaxed">
                         Existem faturas pendentes. O acesso do atleta pode ser restrito em breve.
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <div className="p-5 bg-emerald-500/5 border border-emerald-500/10 rounded-[24px] flex items-start gap-4">
-                    <ShieldCheck className="w-6 h-6 text-emerald-500 flex-shrink-0" />
+                  <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl flex items-start gap-3">
+                    <ShieldCheck className="w-5 h-5 text-emerald-500 flex-shrink-0" />
                     <div>
-                      <h4 className="text-[10px] font-black uppercase text-emerald-600 mb-1">Situação Regular</h4>
-                      <p className="text-[9px] font-bold text-emerald-500/80 uppercase leading-relaxed">
+                      <h4 className="text-[9px] font-black uppercase text-emerald-600 mb-0.5">Situação Regular</h4>
+                      <p className="text-[8px] font-bold text-emerald-500/80 uppercase leading-relaxed">
                         Nenhuma pendência financeira encontrada para este atleta.
                       </p>
                     </div>
                   </div>
                 )}
 
-                <div className="p-5 bg-surface border border-border-main rounded-[24px]">
-                  <h4 className="text-[9px] font-black uppercase text-text-main mb-4 border-b border-border-main pb-2">Próximas Faturas</h4>
-                  <div className="space-y-3">
+                <div className="p-4 bg-surface border border-border-main rounded-2xl">
+                  <h4 className="text-[8px] font-black uppercase text-text-main mb-3 border-b border-border-main pb-1.5">Próximas Faturas</h4>
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Calendar className="w-3 h-3 text-text-subtle" />
-                        <span className="text-[10px] font-bold text-text-muted uppercase">
+                        <Calendar className="w-2.5 h-2.5 text-text-subtle" />
+                        <span className="text-[9px] font-bold text-text-muted uppercase">
                           {currentSubscription?.next_billing_at ? new Date(currentSubscription.next_billing_at).toLocaleDateString('pt-BR') : '---'}
                         </span>
                       </div>
-                      <span className="text-[9px] font-black italic text-primary">R$ {currentSubscription?.plan?.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}</span>
+                      <span className="text-[8px] font-black italic text-primary">R$ {currentSubscription?.plan?.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}</span>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* HISTÓRICO DE PAGAMENTOS */}
-              <div className="lg:col-span-3 bg-surface border border-border-main rounded-[32px] overflow-hidden shadow-sm backdrop-blur-xl">
-                <div className="p-6 border-b border-border-main bg-surface-soft/30 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <History className="w-4 h-4 text-primary" />
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-main">Histórico de Pagamentos</h3>
+              <div className="lg:col-span-3 bg-surface border border-border-main rounded-[24px] overflow-hidden shadow-sm backdrop-blur-xl">
+                <div className="p-4 border-b border-border-main bg-surface-soft/30 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <History className="w-3.5 h-3.5 text-primary" />
+                    <h3 className="text-[9px] font-black uppercase tracking-[0.2em] text-text-main">Histórico de Pagamentos</h3>
                   </div>
-                  <span className="text-[8px] font-black uppercase bg-primary/10 text-primary-dark px-3 py-1 rounded-full">
+                  <span className="text-[7px] font-black uppercase bg-primary/10 text-primary-dark px-2.5 py-0.5 rounded-full">
                     {payments.length} Registros
                   </span>
                 </div>
@@ -1034,47 +1020,47 @@ export default function PerfilAtleta() {
                   <table className="w-full text-left">
                     <thead>
                       <tr className="border-b border-border-main">
-                        <th className="px-6 py-4 text-[8px] font-black uppercase text-text-subtle tracking-[0.2em]">Fatura</th>
-                        <th className="px-6 py-4 text-[8px] font-black uppercase text-text-subtle tracking-[0.2em]">Vencimento</th>
-                        <th className="px-6 py-4 text-[8px] font-black uppercase text-text-subtle tracking-[0.2em]">Pagamento</th>
-                        <th className="px-6 py-4 text-[8px] font-black uppercase text-text-subtle tracking-[0.2em]">Valor</th>
-                        <th className="px-6 py-4 text-[8px] font-black uppercase text-text-subtle tracking-[0.2em]">Método</th>
-                        <th className="px-6 py-4 text-[8px] font-black uppercase text-text-subtle tracking-[0.2em]">Status</th>
+                        <th className="px-5 py-3 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Fatura</th>
+                        <th className="px-5 py-3 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Vencimento</th>
+                        <th className="px-5 py-3 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Pagamento</th>
+                        <th className="px-5 py-3 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Valor</th>
+                        <th className="px-5 py-3 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Método</th>
+                        <th className="px-5 py-3 text-[7px] font-black uppercase text-text-subtle tracking-[0.2em]">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-main/50">
                       {payments.length > 0 ? payments.map((payment) => (
                         <tr key={payment.id} className="hover:bg-surface-soft/50 transition-colors group">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <Receipt className="w-3 h-3 text-text-subtle group-hover:text-primary transition-colors" />
-                              <span className="text-[10px] font-black text-text-main uppercase tracking-tighter">#{payment.id.substring(0, 8)}</span>
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-1.5">
+                              <Receipt className="w-2.5 h-2.5 text-text-subtle group-hover:text-primary transition-colors" />
+                              <span className="text-[9px] font-black text-text-main uppercase tracking-tighter">#{payment.id.substring(0, 8)}</span>
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-[10px] font-bold text-text-muted uppercase">
+                          <td className="px-5 py-3 text-[9px] font-bold text-text-muted uppercase">
                             {new Date(payment.due_date).toLocaleDateString('pt-BR')}
                           </td>
-                          <td className="px-6 py-4 text-[10px] font-bold text-text-muted uppercase">
+                          <td className="px-5 py-3 text-[9px] font-bold text-text-muted uppercase">
                             {payment.paid_at ? new Date(payment.paid_at).toLocaleDateString('pt-BR') : '---'}
                           </td>
-                          <td className="px-6 py-4 text-[10px] font-black italic text-text-main">
+                          <td className="px-5 py-3 text-[9px] font-black italic text-text-main">
                             R$ {payment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="px-6 py-4">
-                            <span className="text-[8px] font-black uppercase px-2 py-1 bg-surface-soft border border-border-main rounded-md text-text-subtle">
+                          <td className="px-5 py-3">
+                            <span className="text-[7px] font-black uppercase px-1.5 py-0.5 bg-surface-soft border border-border-main rounded-md text-text-subtle">
                               {payment.payment_method || 'PIX'}
                             </span>
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-1.5">
                               <div className={cn(
-                                "w-1.5 h-1.5 rounded-full",
+                                "w-1 h-1 rounded-full",
                                 payment.status === 'paid' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" :
                                   payment.status === 'overdue' ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" :
                                     "bg-primary shadow-[0_0_8px_rgba(189,255,1,0.5)]"
                               )} />
                               <span className={cn(
-                                "text-[9px] font-black uppercase italic tracking-widest",
+                                "text-[8px] font-black uppercase italic tracking-widest",
                                 payment.status === 'paid' ? "text-emerald-500" :
                                   payment.status === 'overdue' ? "text-red-500" :
                                     "text-primary-dark"
