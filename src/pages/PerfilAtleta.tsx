@@ -420,6 +420,13 @@ export default function PerfilAtleta() {
 
   const handleUpdatePaymentStatus = async (paymentId: string, newStatus: string) => {
     try {
+      // Segurança: se for para marcar como pendente uma fatura já paga, bloquear
+      const currentPayment = payments.find(p => p.id === paymentId);
+      if (currentPayment?.status === 'paid' && newStatus === 'pending') {
+        showToast('Não é possível marcar como pendente uma fatura que já foi paga.', 'error');
+        return;
+      }
+
       const { error } = await supabase!
         .from('subscription_payments')
         .update({
@@ -445,6 +452,13 @@ export default function PerfilAtleta() {
 
   const handleDeletePayment = async (paymentId: string) => {
     try {
+      // Segurança: não permitir exclusão de faturas pagas
+      const currentPayment = payments.find(p => p.id === paymentId);
+      if (currentPayment?.status === 'paid') {
+        showToast('Não é possível excluir uma fatura que já foi paga.', 'error');
+        return;
+      }
+
       const { error } = await supabase!
         .from('subscription_payments')
         .delete()
@@ -1140,38 +1154,32 @@ export default function PerfilAtleta() {
 
                               <div className="w-px h-4 bg-border-main/50 mx-1" />
 
-                              {payment.status !== 'paid' ? (
-                                <button
-                                  onClick={() => handleUpdatePaymentStatus(payment.id, 'paid')}
-                                  className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
-                                  title="Marcar como Pago"
-                                >
-                                  <Check className="w-4 h-4" />
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleUpdatePaymentStatus(payment.id, 'pending')}
-                                  className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 hover:bg-amber-500 hover:text-white transition-all shadow-sm"
-                                  title="Marcar como Aberto"
-                                >
-                                  <Clock className="w-4 h-4" />
-                                </button>
-                              )}
+                              {payment.status !== 'paid' && (
+                                <>
+                                  <button
+                                    onClick={() => handleUpdatePaymentStatus(payment.id, 'paid')}
+                                    className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
+                                    title="Marcar como Pago"
+                                  >
+                                    <Check className="w-4 h-4" />
+                                  </button>
 
-                              <button
-                                onClick={() => {
-                                  openConfirmModal({
-                                    title: "Excluir Fatura?",
-                                    description: `Esta ação não pode ser desfeita. Deseja excluir a fatura no valor de R$ ${Number(payment.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}?`,
-                                    type: 'danger',
-                                    onConfirm: () => handleDeletePayment(payment.id)
-                                  });
-                                }}
-                                className="w-8 h-8 rounded-xl bg-red-500/5 border border-red-500/20 flex items-center justify-center text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm"
-                                title="Excluir Fatura"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                                  <button
+                                    onClick={() => {
+                                      openConfirmModal({
+                                        title: "Excluir Fatura?",
+                                        description: `Esta ação não pode ser desfeita. Deseja excluir a fatura no valor de R$ ${Number(payment.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}?`,
+                                        type: 'danger',
+                                        onConfirm: () => handleDeletePayment(payment.id)
+                                      });
+                                    }}
+                                    className="w-8 h-8 rounded-xl bg-red-500/5 border border-red-500/20 flex items-center justify-center text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                                    title="Excluir Fatura"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>

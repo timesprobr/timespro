@@ -129,18 +129,102 @@ export default function Dashboard() {
     if (!organization) return;
     setLoading(true);
     try {
-      // 1. Atletas
-      const { count: athletesCount } = await supabase!
+      // Cálculo de datas baseado no filtro
+      const now = new Date();
+      const getDates = () => {
+        const start = new Date();
+        const prevStart = new Date();
+        const prevEnd = new Date();
+
+        switch (filter) {
+          case 'HOJE':
+            start.setHours(0, 0, 0, 0);
+            prevStart.setDate(prevStart.getDate() - 1);
+            prevStart.setHours(0, 0, 0, 0);
+            prevEnd.setDate(prevEnd.getDate() - 1);
+            prevEnd.setHours(23, 59, 59, 999);
+            break;
+          case '07 DIAS':
+            start.setDate(start.getDate() - 7);
+            prevStart.setDate(prevStart.getDate() - 14);
+            prevEnd.setDate(prevEnd.getDate() - 7);
+            break;
+          case '30 DIAS':
+            start.setDate(start.getDate() - 30);
+            prevStart.setDate(prevStart.getDate() - 60);
+            prevEnd.setDate(prevEnd.getDate() - 30);
+            break;
+          case '90 DIAS':
+            start.setDate(start.getDate() - 90);
+            prevStart.setDate(prevStart.getDate() - 180);
+            prevEnd.setDate(prevEnd.getDate() - 90);
+            break;
+          case 'MÁXIMO':
+            start.setFullYear(2020, 0, 1);
+            prevStart.setFullYear(2010, 0, 1);
+            prevEnd.setFullYear(2019, 11, 31);
+            break;
+          case 'ESSE MÊS':
+          default:
+            start.setDate(1);
+            start.setHours(0, 0, 0, 0);
+            prevStart.setMonth(prevStart.getMonth() - 1);
+            prevStart.setDate(1);
+            prevStart.setHours(0, 0, 0, 0);
+            prevEnd.setMonth(prevEnd.getMonth());
+            prevEnd.setDate(0);
+            prevEnd.setHours(23, 59, 59, 999);
+            break;
+        }
+        return { 
+          start: start.toISOString(), 
+          prevStart: prevStart.toISOString(), 
+          prevEnd: prevEnd.toISOString() 
+        };
+      };
+
+      const { start, prevStart, prevEnd } = getDates();
+
+      // 1. Atletas (Total e Crescimento)
+      const { count: totalAthletes } = await supabase!
         .from('athletes')
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', organization.id);
 
-      // 2. Sócios
-      const { count: membersCount } = await supabase!
+      const { count: newAthletes } = await supabase!
+        .from('athletes')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', organization.id)
+        .gte('created_at', start);
+
+      const { count: prevNewAthletes } = await supabase!
+        .from('athletes')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', organization.id)
+        .gte('created_at', prevStart)
+        .lte('created_at', prevEnd);
+
+      // 2. Sócios (Total e Crescimento)
+      const { count: totalMembers } = await supabase!
         .from('athletes')
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', organization.id)
         .not('fan_program_id', 'is', null);
+
+      const { count: newMembers } = await supabase!
+        .from('athletes')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', organization.id)
+        .not('fan_program_id', 'is', null)
+        .gte('created_at', start);
+
+      const { count: prevNewMembers } = await supabase!
+        .from('athletes')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', organization.id)
+        .not('fan_program_id', 'is', null)
+        .gte('created_at', prevStart)
+        .lte('created_at', prevEnd);
 
       // 3. Eventos Próximos
       const { data: upcomingEvents } = await supabase!
@@ -153,25 +237,36 @@ export default function Dashboard() {
       
       if (upcomingEvents) setEvents(upcomingEvents);
 
-      // 4. Financeiro (Receita do mês)
-      const now = new Date();
-      const firstDayMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      
-      const { data: transactions } = await supabase!
-        .from('financial_transactions')
-        .select('amount, type, date')
+      const { count: periodEvents } = await supabase!
+        .from('club_events')
+        .select('*', { count: 'exact', head: true })
         .eq('organization_id', organization.id)
-        .gte('date', firstDayMonth);
+        .gte('start_at', start);
 
-      const monthlyRevenue = transactions?.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0) || 0;
+      // 4. Financeiro (Receita do período e anterior)
+      const { data: currentTxs } = await supabase!
+        .from('financial_transactions')
+        .select('amount, type, status')
+        .eq('organization_id', organization.id)
+        .gte('date', start);
 
-      // 5. Fluxo de Caixa (Últimos 5 meses)
+      const { data: prevTxs } = await supabase!
+        .from('financial_transactions')
+        .select('amount, type, status')
+        .eq('organization_id', organization.id)
+        .gte('date', prevStart)
+        .lte('date', prevEnd);
+
+      const currentRevenue = currentTxs?.filter(t => t.type === 'income' && t.status === 'paid').reduce((acc, t) => acc + t.amount, 0) || 0;
+      const prevRevenue = prevTxs?.filter(t => t.type === 'income' && t.status === 'paid').reduce((acc, t) => acc + t.amount, 0) || 0;
+
+      // 5. Fluxo de Caixa (Mantido mensal para o gráfico, mas respeitando o status)
       const fiveMonthsAgo = new Date();
       fiveMonthsAgo.setMonth(fiveMonthsAgo.getMonth() - 5);
       
       const { data: historyTx } = await supabase!
         .from('financial_transactions')
-        .select('amount, type, date')
+        .select('amount, type, date, status')
         .eq('organization_id', organization.id)
         .gte('date', fiveMonthsAgo.toISOString());
 
@@ -187,8 +282,8 @@ export default function Dashboard() {
         
         return {
           name: monthName,
-          entrada: monthTxs.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0),
-          saida: monthTxs.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0),
+          entrada: monthTxs.filter(t => t.type === 'income' && t.status === 'paid').reduce((acc, t) => acc + t.amount, 0),
+          saida: monthTxs.filter(t => t.type === 'expense' && t.status === 'paid').reduce((acc, t) => acc + t.amount, 0),
         };
       });
       setCashFlow(flowData);
@@ -212,24 +307,33 @@ export default function Dashboard() {
         });
       }
 
+      // Pendências (Inadimplência)
       const { data: pendingTxs } = await supabase!
         .from('financial_transactions')
         .select('amount')
         .eq('organization_id', organization.id)
-        .eq('status', 'pending');
+        .eq('status', 'pending')
+        .eq('type', 'income');
 
       const totalPending = pendingTxs?.reduce((acc, t) => acc + t.amount, 0) || 0;
 
+      // Função auxiliar para calcular tendência
+      const getTrend = (current: number, prev: number) => {
+        if (prev === 0) return current > 0 ? '+100%' : '+0%';
+        const change = ((current - prev) / prev) * 100;
+        return `${change >= 0 ? '+' : ''}${change.toFixed(0)}%`;
+      };
+
       // Atualizar Stats
       setStats({
-        athletes: athletesCount || 0,
-        revenue: monthlyRevenue,
-        members: membersCount || 0,
-        events: upcomingEvents?.length || 0,
-        revenueChange: '+0%', 
-        athletesChange: '+0%',
-        membersChange: '+0%',
-        eventsChange: `+${upcomingEvents?.length || 0}`
+        athletes: totalAthletes || 0,
+        revenue: currentRevenue,
+        members: totalMembers || 0,
+        events: periodEvents || 0,
+        revenueChange: getTrend(currentRevenue, prevRevenue),
+        athletesChange: getTrend(newAthletes || 0, prevNewAthletes || 0),
+        membersChange: getTrend(newMembers || 0, prevNewMembers || 0),
+        eventsChange: `+${periodEvents || 0}`
       });
 
       setDelinquency(prev => ({

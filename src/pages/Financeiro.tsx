@@ -263,9 +263,9 @@ export default function Financeiro() {
 
   const stats = [
     { label: 'Saldo Disponível', value: wallet.balance, icon: Wallet, color: 'text-primary' },
-    { label: 'Entradas (Mês)', value: transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0), icon: TrendingUp, color: 'text-emerald-500' },
-    { label: 'Saídas (Mês)', value: transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0), icon: TrendingDown, color: 'text-rose-500' },
-    { label: 'Contas a Pagar', value: transactions.filter(t => t.status === 'pending').reduce((acc, t) => acc + t.amount, 0), icon: AlertCircle, color: 'text-amber-500' },
+    { label: 'Entradas (Mês)', value: transactions.filter(t => t.type === 'income' && t.status === 'paid').reduce((acc, t) => acc + t.amount, 0), icon: TrendingUp, color: 'text-emerald-500' },
+    { label: 'Saídas (Mês)', value: transactions.filter(t => t.type === 'expense' && t.status === 'paid').reduce((acc, t) => acc + t.amount, 0), icon: TrendingDown, color: 'text-rose-500' },
+    { label: 'Contas a Pagar', value: transactions.filter(t => t.type === 'expense' && t.status === 'pending').reduce((acc, t) => acc + t.amount, 0), icon: AlertCircle, color: 'text-amber-500' },
     { label: 'Patrimônio (Materiais)', value: inventoryValue, icon: Package, color: 'text-sky-500' },
   ];
 
