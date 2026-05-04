@@ -387,6 +387,9 @@ export default function PerfilAtleta() {
     const selectedPlan = memberships.flatMap(m => m.plans).find(p => p.id === selectedPlanId);
     const planName = isFree ? 'ISENÇÃO (GRATUITO)' : selectedPlan?.name || '---';
 
+    // Fechar o modal de escolha ANTES de abrir a confirmação para evitar "loops" visuais
+    setIsMembershipModalOpen(false);
+
     setConfirmConfig({
       title: "Confirmar Alteração?",
       description: `Plano: ${planName}\nVencimento: Todo dia ${dueDay}\n\nDeseja confirmar estas alterações?`,
@@ -837,10 +840,10 @@ export default function PerfilAtleta() {
         {activeTab === 'financeiro' && (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* GRID PRINCIPAL FINANCEIRO */}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
               
               {/* COLUNA LATERAL ESQUERDA: CARDS COMPACTOS */}
-              <div className="lg:col-span-1 space-y-4">
+              <div className="lg:col-span-1 space-y-3">
                 {/* ASSINATURA ATIVA (MUITO COMPACTA) */}
                 <div className="bg-surface border border-border-main rounded-[20px] p-4 shadow-sm backdrop-blur-xl">
                   <div className="flex items-center justify-between mb-3">
@@ -931,27 +934,27 @@ export default function PerfilAtleta() {
                 </div>
 
                 {/* ALERTAS (MUITO COMPACTO) */}
-                <div className="bg-surface border border-border-main rounded-[20px] p-4 shadow-sm">
+                <div className="bg-surface border border-border-main rounded-[20px] p-3 shadow-sm">
                   <div className="flex items-center gap-2 mb-2">
-                    <AlertCircle className="w-3.5 h-3.5 text-primary" />
-                    <h3 className="text-[9px] font-black uppercase tracking-widest text-text-main">Status</h3>
+                    <AlertCircle className="w-3 h-3 text-primary" />
+                    <h3 className="text-[8px] font-black uppercase tracking-widest text-text-main">Status</h3>
                   </div>
                   {payments.some(p => p.status === 'overdue') ? (
-                    <div className="p-2.5 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 animate-pulse">
-                      <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
-                      <span className="text-[8px] font-black uppercase text-red-600">Atrasado</span>
+                    <div className="p-2 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 animate-pulse">
+                      <AlertTriangle className="w-3 h-3 text-red-500" />
+                      <span className="text-[7px] font-black uppercase text-red-600">Atrasado</span>
                     </div>
                   ) : (
-                    <div className="p-2.5 bg-emerald-500/5 border border-emerald-500/10 rounded-xl flex items-center gap-2">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                      <span className="text-[8px] font-black uppercase text-emerald-600">Em dia</span>
+                    <div className="p-2 bg-emerald-500/5 border border-emerald-500/10 rounded-xl flex items-center gap-2">
+                      <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                      <span className="text-[7px] font-black uppercase text-emerald-600">Em dia</span>
                     </div>
                   )}
                 </div>
               </div>
 
               {/* HISTÓRICO DE PAGAMENTOS (PRIORIDADE TOTAL) */}
-              <div className="lg:col-span-3 bg-surface border border-border-main rounded-[28px] overflow-hidden shadow-xl border-t-4 border-t-primary/20">
+              <div className="lg:col-span-4 bg-surface border border-border-main rounded-[28px] overflow-hidden shadow-xl border-t-4 border-t-primary/20">
                 <div className="p-5 border-b border-border-main bg-surface-soft/20 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -1041,7 +1044,7 @@ export default function PerfilAtleta() {
                                   const athleteName = (athlete.nickname || athlete.full_name.split(' ')[0] || 'atleta').toLowerCase().trim();
                                   const url = window.location.origin + "/checkout/" + athleteName + "/" + (payment.external_id || payment.id);
                                   const clubName = organization?.name || 'Clube';
-                                  const message = `Olá! Aqui está a mensalidade no valor R$ ${amountStr}.\nAcesse o link abaixo e efetue o pagamento:\n\n${url}\n\n- ${clubName}`;
+                                  const message = `Olá ! Aqui esta a mensalidade no valor R$ ${amountStr},\nAcesse o link abaixo e efeute o pagamento\n\n${url}\n\n- ${clubName}`;
                                   const phone = currentSubscription?.payer_phone?.replace(/\D/g, '') || athlete.whatsapp?.replace(/\D/g, '');
                                   window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(message)}`, '_blank');
                                 }}

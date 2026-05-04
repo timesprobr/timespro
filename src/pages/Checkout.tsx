@@ -69,8 +69,8 @@ export default function Checkout() {
             )
           )
         `)
-        .eq('id', id)
-        .single();
+        .or(`id.eq.${id},external_id.eq.${id}`)
+        .maybeSingle();
 
       if (paymentError) throw paymentError;
 
