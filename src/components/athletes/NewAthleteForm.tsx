@@ -18,7 +18,8 @@ import {
   IdCard,
   Fingerprint,
   ShieldCheck,
-  Smartphone
+  Smartphone,
+  Instagram
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useOrg } from '../../context/OrgContext';
@@ -48,6 +49,7 @@ export default function NewAthleteForm({ onClose, onSuccess, athlete }: NewAthle
     number: athlete?.number || '',
     email: athlete?.email || '',
     whatsapp: athlete?.whatsapp || '',
+    instagram: athlete?.instagram || '',
     modality_id: athlete?.modality_id || '',
     category_id: athlete?.category_id || '',
     position_id: athlete?.position_id || '',
@@ -257,6 +259,7 @@ export default function NewAthleteForm({ onClose, onSuccess, athlete }: NewAthle
         photo_url: photoUrl,
         email: formData.email,
         whatsapp: formData.whatsapp,
+        instagram: formData.instagram,
         address_json: formData.address,
         sizes_json: formData.sizes,
         documents_json: allDocuments,
@@ -386,6 +389,15 @@ export default function NewAthleteForm({ onClose, onSuccess, athlete }: NewAthle
                 <div className="relative">
                   <input type="email" name="email" value={formData.email} onChange={handleInputChange} className="input-field pl-10" placeholder="atleta@exemplo.com" />
                   <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] opacity-50" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] flex items-center gap-2">
+                  <Instagram size={12} className="text-primary" /> Instagram
+                </label>
+                <div className="relative">
+                  <input name="instagram" value={formData.instagram} onChange={handleInputChange} className="input-field pl-10" placeholder="ex: jg_atleta" />
+                  <Instagram size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] opacity-50" />
                 </div>
               </div>
             </div>

@@ -39,7 +39,8 @@ import {
   Receipt,
   ChevronRight,
   User,
-  ChevronDown
+  ChevronDown,
+  Instagram
 } from 'lucide-react';
 
 // Ícones Customizados para Uniforme (SaaS High-Fidelity)
@@ -111,6 +112,7 @@ interface Athlete {
   club_shield_url?: string;
   dominant_foot?: string;
   documents_json?: any[];
+  instagram?: string;
 }
 
 
@@ -600,12 +602,15 @@ export default function PerfilAtleta() {
               <div className="p-5 -mt-8 relative z-10 flex flex-col flex-grow">
                 <div className="flex-grow">
                   <div className="flex flex-col">
-                    <h1 className="text-3xl font-black uppercase italic tracking-tighter text-text-main leading-none mb-1">{athlete.nickname || athlete.full_name}</h1>
+                    <h1 className="text-3xl font-black uppercase italic tracking-tighter text-text-main leading-none mb-1">
+                      {athlete.nickname?.replace('@', '') || athlete.full_name.split(' ')[0]}
+                    </h1>
                     <div className="flex items-center gap-3">
                       <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] italic">{athlete.full_name}</p>
-                      {athlete.email && (
-                        <div className="flex items-center gap-1 text-[9px] font-bold text-text-muted lowercase tracking-tight border-l border-border-main pl-3">
-                          {athlete.email}
+                      {athlete.instagram && (
+                        <div className="flex items-center gap-1.5 text-[9px] font-bold text-text-muted lowercase tracking-tight border-l border-border-main pl-3">
+                          <Instagram className="w-3 h-3 text-primary" />
+                          <span className="opacity-80">{athlete.instagram.replace('@', '')}</span>
                         </div>
                       )}
                     </div>
@@ -686,7 +691,7 @@ export default function PerfilAtleta() {
                   </div>
                   <div className="text-right">
                     <p className="text-[7px] font-black text-text-subtle uppercase tracking-widest">Apelido</p>
-                    <p className="text-xs font-black italic text-primary-dark uppercase">{athlete.nickname || '---'}</p>
+                    <p className="text-xs font-black italic text-primary-dark uppercase">{athlete.nickname?.replace('@', '') || '---'}</p>
                   </div>
                 </div>
 
@@ -877,7 +882,7 @@ export default function PerfilAtleta() {
                   className="w-full py-3 bg-primary rounded-xl flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(189,255,1,0.2)] hover:scale-[1.02] transition-all group"
                 >
                   <span className="text-black font-black italic uppercase text-[9px] tracking-widest">
-                    {currentSubscription ? 'Alterar Plano' : 'Selecionar Plano'}
+                    {currentSubscription ? 'Alterar' : 'Selecionar Plano'}
                   </span>
                   <ChevronRight className="w-3.5 h-3.5 text-black group-hover:translate-x-1 transition-transform" />
                 </button>
@@ -1128,7 +1133,7 @@ export default function PerfilAtleta() {
                             <div className="flex items-center justify-center gap-2">
                               <button
                                 onClick={() => {
-                                  const athleteName = (athlete.nickname || athlete.full_name.split(' ')[0] || 'atleta').toLowerCase().trim();
+                                  const athleteName = (athlete.nickname?.replace('@', '') || athlete.full_name.split(' ')[0] || 'atleta').toLowerCase().trim();
                                   const url = window.location.origin + "/checkout/" + athleteName + "/" + payment.id;
                                   window.open(url, '_blank');
                                 }}
