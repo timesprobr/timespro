@@ -75,9 +75,9 @@ Deno.serve(async (req) => {
     let subject = template.subject
 
     Object.entries(placeholders).forEach(([key, value]) => {
-      const regex = new RegExp(key, 'g')
-      html = html.replace(regex, value || '')
-      subject = subject.replace(regex, value || '')
+      // Usar split/join para evitar problemas com caracteres especiais do RegExp como {{ }}
+      html = html.split(key).join(value || '')
+      subject = subject.split(key).join(value || '')
     })
 
     // 4. Enviar via Resend
