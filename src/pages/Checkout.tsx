@@ -48,6 +48,40 @@ export default function Checkout() {
     loadCheckoutData();
   }, [id]);
 
+  const formatCPF = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    return digits
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+      .replace(/(-\d{2})\d+?$/, '$1');
+  };
+
+  const formatPhone = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length <= 10) {
+      return digits
+        .replace(/(\d{2})(\d)/, '($1) $2')
+        .replace(/(\d{4})(\d)/, '$1-$2')
+        .replace(/(-\d{4})\d+?$/, '$1');
+    }
+    return digits
+      .replace(/(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{1})(\d{4})(\d)/, '$2-$3')
+      .replace(/(\(\d{2}\)) (\d) (\d{4})(\d)/, '$1 $2 $3-$4')
+      .replace(/(-\d{4})\d+?$/, '$1');
+  };
+
+  const handleCPFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatCPF(e.target.value);
+    setFormData(prev => ({ ...prev, taxId: formatted }));
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatPhone(e.target.value);
+    setFormData(prev => ({ ...prev, phone: formatted }));
+  };
+
   const loadCheckoutData = async () => {
     try {
       setLoading(true);
@@ -133,9 +167,9 @@ export default function Checkout() {
         amountCentavos: Math.round(amount * 100),
         description: billingData?.description || 'Mensalidade TimesPro',
         customerName: formData.name,
-        customerTaxId: formData.taxId,
+        customerTaxId: formData.taxId.replace(/\D/g, ''), // Limpar para AbacatePay
         customerEmail: formData.email,
-        customerPhone: formData.phone,
+        customerPhone: formData.phone.replace(/\D/g, ''), // Limpar para AbacatePay
         externalId: id,
         method: 'PIX',
         clubeId: billingData?.organization_id || displayOrg?.id || billingData?.athletes?.organization_id
@@ -292,7 +326,8 @@ export default function Checkout() {
                       placeholder="000.000.000-00"
                       className="w-full bg-[#F8F9FA] border border-slate-100 rounded-xl py-3 px-4 text-[13px] text-slate-900 font-medium focus:bg-white focus:border-[#A3E635] outline-none transition-all placeholder:text-slate-300"
                       value={formData.taxId}
-                      onChange={(e) => setFormData({...formData, taxId: e.target.value})}
+                      onChange={handleCPFChange}
+                      maxLength={14}
                     />
                   </div>
                   <div className="space-y-1">
@@ -300,10 +335,11 @@ export default function Checkout() {
                     <input 
                       type="text"
                       autoComplete="new-password"
-                      placeholder="(00) 00000-0000"
+                      placeholder="(00) 0 0000-0000"
                       className="w-full bg-[#F8F9FA] border border-slate-100 rounded-xl py-3 px-4 text-[13px] text-slate-900 font-medium focus:bg-white focus:border-[#A3E635] outline-none transition-all placeholder:text-slate-300"
                       value={formData.phone}
-                      onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                      onChange={handlePhoneChange}
+                      maxLength={16}
                     />
                   </div>
                 </div>
