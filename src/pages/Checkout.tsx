@@ -43,6 +43,7 @@ export default function Checkout() {
     email: '',
     phone: ''
   });
+  const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     loadCheckoutData();
@@ -153,6 +154,35 @@ export default function Checkout() {
       setLoading(false);
     }
   };
+
+  // Real-time listener para confirmação de pagamento
+  useEffect(() => {
+    if (!billingData?.id) return;
+
+    const channel = supabase
+      .channel(`payment-status-${billingData.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'subscription_payments',
+          filter: `id=eq.${billingData.id}`
+        },
+        (payload) => {
+          if (payload.new.status === 'paid') {
+            setSuccess(true);
+            setBillingData(prev => prev ? { ...prev, status: 'paid' } : null);
+            showToast('Pagamento confirmado!', 'success');
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [billingData?.id]);
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -393,31 +423,51 @@ export default function Checkout() {
         ) : (
           /* Success Screen Compacta */
           <div className="bg-white rounded-[32px] p-6 border border-slate-100 shadow-xl space-y-6 animate-in zoom-in-95 duration-500 text-center mx-auto max-w-[340px]">
-            <div className="space-y-2">
-              <div className="w-12 h-12 bg-[#A3E635]/10 rounded-full flex items-center justify-center mx-auto">
-                <Smartphone className="w-6 h-6 text-[#A3E635]" />
+            {success || billingData?.status === 'paid' ? (
+              <div className="py-8 space-y-6 animate-in fade-in zoom-in duration-700">
+                <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <ShieldCheck className="w-10 h-10 text-emerald-500" />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-black text-slate-900 italic uppercase leading-none">PAGO COM SUCESSO!</h2>
+                  <p className="text-[10px] text-slate-500 max-w-[200px] mx-auto uppercase font-bold tracking-tight">Obrigado! Seu pagamento foi processado e o atleta já está regularizado.</p>
+                </div>
+                <button
+                  onClick={() => window.close()}
+                  className="w-full py-3.5 bg-emerald-500 text-white rounded-[18px] font-black text-[12px] uppercase italic hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20"
+                >
+                  Concluir e Sair
+                </button>
               </div>
-              <h2 className="text-xl font-black text-slate-900 italic uppercase">PIX Gerado!</h2>
-              <p className="text-[10px] text-slate-500 max-w-[180px] mx-auto uppercase font-bold tracking-tight">Escaneie o código no app do seu banco</p>
-            </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <div className="w-12 h-12 bg-[#A3E635]/10 rounded-full flex items-center justify-center mx-auto">
+                    <Smartphone className="w-6 h-6 text-[#A3E635]" />
+                  </div>
+                  <h2 className="text-xl font-black text-slate-900 italic uppercase">PIX Gerado!</h2>
+                  <p className="text-[10px] text-slate-500 max-w-[180px] mx-auto uppercase font-bold tracking-tight">Escaneie o código no app do seu banco</p>
+                </div>
 
-            <div className="p-3 bg-white border border-slate-50 rounded-[24px] shadow-sm flex items-center justify-center">
-              <img src={pixData.qrcode} alt="QR Code PIX" className="w-48 h-48" />
-            </div>
+                <div className="p-3 bg-white border border-slate-50 rounded-[24px] shadow-sm flex items-center justify-center">
+                  <img src={pixData.qrcode} alt="QR Code PIX" className="w-48 h-48" />
+                </div>
 
-            <div className="space-y-3">
-              <button
-                onClick={copyPixCode}
-                className="w-full py-3.5 bg-[#0F172A] text-white rounded-[18px] font-black text-[12px] flex items-center justify-center gap-2 hover:bg-slate-800 transition-all uppercase italic"
-              >
-                <Copy className="w-4 h-4" />
-                Copiar Código PIX
-              </button>
-              <div className="flex items-center justify-center gap-2 text-slate-400">
-                <Clock className="w-3.5 h-3.5 animate-spin-slow" />
-                <span className="text-[8px] font-black uppercase tracking-widest">Aguardando Pagamento...</span>
-              </div>
-            </div>
+                <div className="space-y-3">
+                  <button
+                    onClick={copyPixCode}
+                    className="w-full py-3.5 bg-[#0F172A] text-white rounded-[18px] font-black text-[12px] flex items-center justify-center gap-2 hover:bg-slate-800 transition-all uppercase italic"
+                  >
+                    <Copy className="w-4 h-4" />
+                    Copiar Código PIX
+                  </button>
+                  <div className="flex items-center justify-center gap-2 text-slate-400">
+                    <Clock className="w-3.5 h-3.5 animate-spin-slow" />
+                    <span className="text-[8px] font-black uppercase tracking-widest">Aguardando Pagamento...</span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </main>
