@@ -41,7 +41,6 @@ export default function Carteira() {
   // PIX form
   const [pixType, setPixType] = useState<PixType>('cnpj');
   const [pixKey, setPixKey] = useState('');
-  const [pixCnpj, setPixCnpj] = useState('');
   const [verifyStep, setVerifyStep] = useState<VerifyStep>('form');
 
   useEffect(() => { if (organization) fetchWalletData(); }, [organization]);
@@ -53,34 +52,54 @@ export default function Carteira() {
       if (data) {
         setWallet(data);
         if (data.bank_pix_key) setPixKey(data.bank_pix_key);
-        if (data.tax_id) setPixCnpj(data.tax_id);
       }
       const { data: wd } = await supabase!.from('wallet_withdrawals').select('*').eq('wallet_id', data?.id).order('created_at', { ascending: false });
       setWithdrawals(wd || []);
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
-
   const handleVerifyAndSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wallet) return;
     setVerifyStep('verifying');
-    // Simulated validation: CNPJ must match the club's registered CNPJ
-    await new Promise(r => setTimeout(r, 2000));
-    const orgCnpj = (organization?.cnpj || organization?.settings?.cnpj)?.replace(/\D/g, '') || '';
-    const inputCnpj = pixCnpj.replace(/\D/g, '');
     
-    if (pixType === 'cnpj' && orgCnpj && inputCnpj !== orgCnpj) {
-      setVerifyStep('error'); return;
-    }
+    // Simulação de verificação real com delay
+    await new Promise(r => setTimeout(r, 1500));
 
-    // Adicional: se o clube não tiver CNPJ cadastrado, avise que ele precisa cadastrar nas configurações
-    if (!orgCnpj) {
-      alert('O clube não possui CNPJ cadastrado nas configurações. Por favor, cadastre o CNPJ do clube primeiro.');
+    const orgCnpj = (organization?.cnpj || organization?.settings?.cnpj || organization?.settings?.tax_id)?.replace(/\D/g, '') || '';
+    const cleanPixKey = pixKey.replace(/\D/g, '');
+    
+    // 1. Validação de Formato Real (Regex)
+    const pixRegex = {
+      cnpj: /^\d{14}$/,
+      email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+      telefone: /^\+?\d{10,15}$/,
+      aleatoria: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    };
+
+    const isValidFormat = pixType === 'email' ? pixRegex.email.test(pixKey) : 
+                        pixType === 'cnpj' ? pixRegex.cnpj.test(cleanPixKey) :
+                        pixType === 'telefone' ? pixRegex.telefone.test(cleanPixKey) :
+                        pixRegex.aleatoria.test(pixKey);
+
+    if (!isValidFormat) {
+      alert(`Formato de chave ${pixType.toUpperCase()} inválido.`);
       setVerifyStep('form');
       return;
     }
+
+    // 2. Validação de Titularidade (Se for CNPJ, deve ser o do Clube)
+    if (pixType === 'cnpj' && orgCnpj && cleanPixKey !== orgCnpj) {
+      setVerifyStep('error'); return;
+    }
+
+    // 3. Se o clube não tiver CNPJ, não podemos validar titularidade de forma automática para outras chaves, 
+    // mas salvamos o CNPJ do clube como o tax_id do recebedor
     try {
-      await supabase!.from('wallets').update({ bank_pix_key: pixKey, tax_id: pixCnpj }).eq('id', wallet.id);
+      await supabase!.from('wallets').update({ 
+        bank_pix_key: pixKey, 
+        tax_id: orgCnpj || null // Vincula automaticamente ao CNPJ do clube
+      }).eq('id', wallet.id);
+      
       setVerifyStep('verified');
       setTimeout(() => { setIsPixModalOpen(false); fetchWalletData(); setVerifyStep('form'); }, 1500);
     } catch { setVerifyStep('error'); }
@@ -406,20 +425,11 @@ export default function Carteira() {
                     placeholder={PIX_TYPES.find(t => t.value === pixType)?.placeholder}
                     className="w-full bg-[var(--surface-soft)]/50 border border-[var(--border)] rounded-xl px-4 py-3 text-sm font-bold text-[var(--text)] focus:border-primary outline-none transition-all"
                   />
-                </div>
-
-                {/* CNPJ Confirmation */}
-                <div className="space-y-1.5">
-                  <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] flex items-center gap-1.5">
-                    <Lock size={10} className="text-primary" /> CNPJ do Clube (Titular da Conta)
-                  </label>
-                  <input required type="text"
-                    value={formatCNPJ(pixCnpj)}
-                    onChange={e => setPixCnpj(e.target.value)}
-                    placeholder="00.000.000/0000-00"
-                    className="w-full bg-[var(--surface-soft)]/50 border border-[var(--border)] rounded-xl px-4 py-3 text-sm font-bold text-[var(--text)] focus:border-primary outline-none transition-all"
-                  />
-                  <p className="text-[8px] text-[var(--text-muted)] font-medium">Deve ser o mesmo CNPJ registrado no clube.</p>
+                  {pixType === 'cnpj' && (
+                    <p className="text-[8px] text-[var(--text-muted)] font-medium">
+                      A chave será validada automaticamente com o CNPJ do clube: <span className="text-primary font-bold">{organization?.cnpj || organization?.settings?.cnpj || 'Não cadastrado'}</span>
+                    </p>
+                  )}
                 </div>
 
                 <button type="submit" className="w-full py-3.5 bg-primary text-black rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
