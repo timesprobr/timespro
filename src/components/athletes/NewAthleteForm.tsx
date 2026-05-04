@@ -11,7 +11,14 @@ import {
   MapPin, 
   Shirt,
   FilePlus,
-  Trash2
+  Trash2,
+  Phone,
+  Mail,
+  Zap,
+  IdCard,
+  Fingerprint,
+  ShieldCheck,
+  Smartphone
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useOrg } from '../../context/OrgContext';
@@ -342,13 +349,19 @@ export default function NewAthleteForm({ onClose, onSuccess, athlete }: NewAthle
                 <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] flex items-center gap-2">
                   <FileText size={12} className="text-primary" /> CPF
                 </label>
-                <input name="cpf" value={formData.cpf} onChange={handleInputChange} className="input-field" placeholder="000.000.000-00" />
+                <div className="relative">
+                  <input name="cpf" value={formData.cpf} onChange={handleInputChange} className="input-field pl-10" placeholder="000.000.000-00" />
+                  <IdCard size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] flex items-center gap-2">
-                  <FileText size={12} className="text-primary" /> RG
+                  <Fingerprint size={12} className="text-primary" /> RG
                 </label>
-                <input name="rg" value={formData.rg} onChange={handleInputChange} className="input-field" placeholder="00.000.000-0" />
+                <div className="relative">
+                  <input name="rg" value={formData.rg} onChange={handleInputChange} className="input-field pl-10" placeholder="00.000.000-0" />
+                  <ShieldCheck size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                </div>
               </div>
             </div>
           </div>
@@ -359,15 +372,21 @@ export default function NewAthleteForm({ onClose, onSuccess, athlete }: NewAthle
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] flex items-center gap-2">
-                  <User size={12} className="text-primary" /> WhatsApp
+                  <Smartphone size={12} className="text-primary" /> WhatsApp
                 </label>
-                <input name="whatsapp" value={formData.whatsapp} onChange={handleInputChange} className="input-field" placeholder="(00) 00000-0000" />
+                <div className="relative">
+                  <input name="whatsapp" value={formData.whatsapp} onChange={handleInputChange} className="input-field pl-10" placeholder="(00) 00000-0000" />
+                  <Smartphone size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] opacity-50" />
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] flex items-center gap-2">
-                  <FileText size={12} className="text-primary" /> Email de Contato
+                  <Mail size={12} className="text-primary" /> Email de Contato
                 </label>
-                <input type="email" name="email" value={formData.email} onChange={handleInputChange} className="input-field" placeholder="atleta@exemplo.com" />
+                <div className="relative">
+                  <input type="email" name="email" value={formData.email} onChange={handleInputChange} className="input-field pl-10" placeholder="atleta@exemplo.com" />
+                  <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] opacity-50" />
+                </div>
               </div>
             </div>
 
@@ -445,13 +464,25 @@ export default function NewAthleteForm({ onClose, onSuccess, athlete }: NewAthle
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] flex items-center gap-2">
-                    <Check size={12} className="text-primary" /> Pé Dominante
+                    <Zap size={12} className="text-primary" /> Pé Dominante
                   </label>
-                  <select name="dominant_foot" value={formData.dominant_foot} onChange={handleInputChange} className="input-field">
-                    <option value="Destro">Destro</option>
-                    <option value="Canhoto">Canhoto</option>
-                    <option value="Ambidestro">Ambidestro</option>
-                  </select>
+                  <div className="flex gap-2 p-1 bg-[var(--surface-soft)] border border-[var(--border)] rounded-2xl">
+                    {['Destro', 'Canhoto', 'Ambidestro'].map((foot) => (
+                      <button
+                        key={foot}
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, dominant_foot: foot }))}
+                        className={cn(
+                          "flex-1 py-2 rounded-xl text-[9px] font-black uppercase transition-all",
+                          formData.dominant_foot === foot 
+                            ? "bg-primary text-black shadow-lg" 
+                            : "text-[var(--text-muted)] hover:text-[var(--text)]"
+                        )}
+                      >
+                        {foot}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

@@ -29,7 +29,15 @@ import {
   Upload,
   X,
   Save,
-  ShieldCheck
+  ShieldCheck,
+  AlertCircle,
+  Trash2,
+  History,
+  AlertTriangle,
+  Receipt,
+  ChevronRight,
+  User,
+  ChevronDown
 } from 'lucide-react';
 
 // Ícones Customizados para Uniforme (SaaS High-Fidelity)
@@ -99,6 +107,8 @@ interface Athlete {
   gender?: string;
   created_at: string;
   club_shield_url?: string;
+  dominant_foot?: string;
+  documents_json?: any[];
 }
 
 
@@ -120,6 +130,14 @@ export default function PerfilAtleta() {
   const [isDocumentModalOpen, setIsDocumentModalOpen] = useState(false);
   const [memberships, setMemberships] = useState<any[]>([]);
   const [isSavingSubscription, setIsSavingSubscription] = useState(false);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string;
+    description: string;
+    onConfirm: () => void;
+    type: 'danger' | 'warning' | 'info';
+  } | null>(null);
 
   // Membership Modal Form States
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
@@ -154,7 +172,10 @@ export default function PerfilAtleta() {
 
   useEffect(() => {
     fetchAthleteData();
-  }, [id]);
+    if (activeTab === 'financeiro') {
+      fetchPaymentHistory();
+    }
+  }, [id, activeTab]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
@@ -198,7 +219,7 @@ export default function PerfilAtleta() {
         .from('athlete_subscriptions')
         .select('*, plan:membership_plans(*, membership:memberships(name))')
         .eq('athlete_id', id)
-        .eq('status', 'active')
+        .or('status.eq.active,status.eq.free')
         .maybeSingle();
 
       setCurrentSubscription(subData);
@@ -219,8 +240,73 @@ export default function PerfilAtleta() {
     } finally { setLoading(false); }
   };
 
+  const fetchPaymentHistory = async () => {
+    try {
+      const { data: sub } = await supabase!
+        .from('athlete_subscriptions')
+        .select('id')
+        .eq('athlete_id', id)
+        .maybeSingle();
+
+      if (sub) {
+        const { data, error } = await supabase!
+          .from('subscription_payments')
+          .select('*')
+          .eq('subscription_id', sub.id)
+          .order('due_date', { ascending: false });
+
+        if (error) throw error;
+        setPayments(data || []);
+      }
+    } catch (err) {
+      console.error('Erro ao carregar histórico:', err);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!currentSubscription) return;
+    try {
+      const { error } = await supabase!
+        .from('athlete_subscriptions')
+        .update({ status: 'cancelled', ends_at: new Date().toISOString() })
+        .eq('id', currentSubscription.id);
+
+      if (error) throw error;
+      showToast('Assinatura cancelada com sucesso');
+      fetchAthleteData();
+      setIsConfirmModalOpen(false);
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const openConfirmModal = (config: typeof confirmConfig) => {
+    setConfirmConfig(config);
+    setIsConfirmModalOpen(true);
+  };
+
   const handleSaveSubscription = async () => {
-    if (!organization || (!selectedPlanId && !isFree)) return;
+    try {
+      // Pedir confirmação se estiver alterando plano ou criando um novo pago
+      if (!isFree && selectedPlanId !== currentSubscription?.plan_id) {
+        openConfirmModal({
+          title: "Confirmar Mensalidade?",
+          description: `Você está atribuindo o plano ao atleta. O sistema irá gerar a primeira cobrança com vencimento no dia ${dueDay}.`,
+          type: "warning",
+          onConfirm: async () => {
+            await executeSaveSubscription();
+          }
+        });
+        return;
+      }
+      
+      await executeSaveSubscription();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const executeSaveSubscription = async () => {
     setIsSavingSubscription(true);
     try {
       // 1. Salvar dados básicos no banco local
@@ -308,6 +394,22 @@ export default function PerfilAtleta() {
     }
   };
 
+  const handleConfirmSaveSubscription = () => {
+    if (currentSubscription) {
+      openConfirmModal({
+        title: "Alterar Plano?",
+        description: "Você está prestes a alterar o plano deste atleta. Novas cobranças serão geradas com base nos novos valores.",
+        type: "warning",
+        onConfirm: () => {
+          setIsConfirmModalOpen(false);
+          handleSaveSubscription();
+        }
+      });
+    } else {
+      handleSaveSubscription();
+    }
+  };
+
   const fetchMemberships = async () => {
     if (!organization) return;
     try {
@@ -384,8 +486,9 @@ export default function PerfilAtleta() {
           </div>
         </header>
 
-        {/* GRID PRINCIPAL */}
-        <div className="grid grid-cols-12 gap-5 items-stretch">
+        {/* GRID PRINCIPAL - RENDERIZAÇÃO CONDICIONAL */}
+        {activeTab === 'geral' && (
+          <div className="grid grid-cols-12 gap-5 items-stretch animate-in fade-in slide-in-from-bottom-4 duration-500">
 
           {/* COLUNA ESQUERDA - CARD DO ATLETA */}
           <div className="col-span-12 lg:col-span-3">
@@ -492,7 +595,7 @@ export default function PerfilAtleta() {
                 <div className="col-span-2 flex items-center justify-between bg-surface-soft border border-border-main p-4 rounded-2xl">
                   <div className="space-y-1">
                     <p className="text-[7px] font-black uppercase text-text-subtle tracking-widest">Nome Completo</p>
-                    <p className="text-[11px] font-black italic text-text-main uppercase tracking-tight leading-tight">{athlete.full_name}</p>
+                    <p className="text-[10px] font-black italic text-text-main uppercase tracking-tight leading-tight">{athlete.full_name}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-[7px] font-black text-text-subtle uppercase tracking-widest">Apelido</p>
@@ -505,8 +608,42 @@ export default function PerfilAtleta() {
                     <CalendarDays className="w-3 h-3" /> Nascimento
                   </p>
                   <div className="flex items-center gap-3">
-                    <p className="text-[11px] font-black italic text-text-main uppercase tracking-tighter leading-tight">{athlete.birth_date ? new Date(athlete.birth_date).toLocaleDateString('pt-BR') : '---'}</p>
-                    <span className="px-2 py-0.5 bg-primary/10 border border-primary/20 rounded text-[8px] font-black italic text-primary-dark">{calculateAge(athlete.birth_date)} ANOS</span>
+                    <p className="text-[10px] font-black italic text-text-main uppercase tracking-tighter leading-tight">{athlete.birth_date ? new Date(athlete.birth_date).toLocaleDateString('pt-BR') : '---'}</p>
+                    <span className="px-1.5 py-0.5 bg-primary/10 border border-primary/20 rounded text-[7px] font-black italic text-primary-dark whitespace-nowrap">{calculateAge(athlete.birth_date)} ANOS</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-[7px] font-black uppercase text-text-subtle flex items-center gap-2 tracking-widest">
+                    <UserIcon className="w-3 h-3" /> Pé Dominante
+                  </p>
+                  <div className="flex gap-2">
+                    {['Destro', 'Canhoto', 'Ambidestro'].map((foot) => (
+                      <span 
+                        key={foot}
+                        className={`px-2.5 py-1 rounded-lg text-[7px] font-black italic uppercase transition-all ${
+                          athlete.dominant_foot === foot 
+                            ? 'bg-primary text-black shadow-lg shadow-primary/20 scale-105' 
+                            : 'bg-surface-soft text-text-subtle border border-border-main opacity-50'
+                        }`}
+                      >
+                        {foot}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-[7px] font-black uppercase text-text-subtle flex items-center gap-2 tracking-widest">
+                    <Shirt className="w-3 h-3" /> Posição & Camisa
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-1 bg-surface-soft border border-border-main rounded-lg text-[8px] font-black italic text-text-main uppercase">
+                      {athlete.position || 'N/A'}
+                    </span>
+                    <span className="px-2 py-1 bg-primary/10 border border-primary/20 rounded-lg text-[8px] font-black italic text-primary">
+                      N° {athlete.number || '--'}
+                    </span>
                   </div>
                 </div>
 
@@ -613,103 +750,407 @@ export default function PerfilAtleta() {
             </div>
           </div>
 
-          {/* COLUNA DIREITA */}
-          <div className="col-span-12 lg:col-span-3 flex flex-col gap-5 h-full">
-            {/* MENSALIDADE */}
+          {/* COLUNA DIREITA - MENSALIDADE & DOCUMENTOS */}
+          <div className="col-span-12 lg:col-span-3 flex flex-col gap-5">
+            {/* RESUMO MENSALIDADE */}
             <div className="bg-surface border border-border-main rounded-[32px] p-6 shadow-sm relative overflow-hidden group backdrop-blur-xl">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-primary" />
-                  <h3 className="text-[10px] font-black uppercase text-text-main tracking-widest">Mensalidade</h3>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={cn(
-                    "text-[8px] font-black px-2 py-1 rounded-lg uppercase",
-                    currentSubscription?.status === 'active' ? "bg-emerald-500/10 text-emerald-500" : "bg-primary/10 text-primary-dark"
-                  )}>
-                    {currentSubscription?.status === 'active' ? 'Ativo' : 'Pendente'}
-                  </span>
-                  <button
-                    onClick={() => setIsMembershipModalOpen(true)}
-                    className="p-1 rounded-lg bg-surface-soft border border-border-main hover:border-primary/40 transition-all group/edit"
-                  >
-                    <Edit3 className="w-2.5 h-2.5 text-text-subtle group-hover/edit:text-primary" />
-                  </button>
-                </div>
+              <div className="absolute top-0 right-0 p-4">
+                <CreditCard className="w-12 h-12 text-primary/5 -rotate-12" />
               </div>
+              <div className="flex items-center gap-2 mb-4">
+                <Zap className="w-3.5 h-3.5 text-primary" />
+                <h3 className="text-[9px] font-black uppercase tracking-[0.2em] text-text-main">Plano Ativo</h3>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="p-3 bg-surface-soft border border-border-main rounded-xl">
+                  <p className="text-[7px] font-black text-text-subtle uppercase tracking-widest mb-1">Assinatura Atual</p>
+                  <p className="text-xs font-black italic text-text-main uppercase truncate">
+                    {currentSubscription?.status === 'free' ? 'PLANO DE ISENÇÃO' : (currentSubscription?.plan?.name || 'Sem Plano Ativo')}
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-surface-soft border border-border-main rounded-xl">
+                    <p className="text-[7px] font-black text-text-subtle uppercase tracking-widest mb-1">Valor</p>
+                    <p className={`text-[10px] font-black italic ${currentSubscription?.status === 'free' ? 'text-primary' : 'text-primary'}`}>
+                      {currentSubscription?.status === 'free' ? 'ISENTO' : `R$ ${currentSubscription?.plan?.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}`}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-surface-soft border border-border-main rounded-xl">
+                    <p className="text-[7px] font-black text-text-subtle uppercase tracking-widest mb-1">Vencimento</p>
+                    <p className="text-[10px] font-black text-text-main italic uppercase">
+                      {currentSubscription?.status === 'free' ? 'N/A' : (currentSubscription?.next_billing_at ? new Date(currentSubscription.next_billing_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : (currentSubscription?.due_day ? `DIA ${currentSubscription.due_day}` : '---'))}
+                    </p>
+                  </div>
+                </div>
 
-              <div className="space-y-6">
-                <div className="flex items-center justify-between border-b border-border-main pb-4">
-                  <p className="text-xs font-black italic text-text-main/80 uppercase">
-                    {currentSubscription?.plan?.membership?.name} - {currentSubscription?.plan?.name || 'Sem Plano'}
-                  </p>
-                  <p className="text-lg font-black italic text-primary-dark">
-                    R$ {currentSubscription?.plan?.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-[7px] font-black text-text-subtle uppercase mb-1 tracking-widest">Frequência</p>
-                    <p className="text-[10px] font-black italic text-text-main/70 uppercase">
-                      {currentSubscription?.plan?.billing_period === 'monthly' ? 'Mensal' :
-                        currentSubscription?.plan?.billing_period === 'quarterly' ? 'Trimestral' :
-                          currentSubscription?.plan?.billing_period === 'semiannual' ? 'Semestral' :
-                            currentSubscription?.plan?.billing_period === 'annual' ? 'Anual' : '---'}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[7px] font-black text-text-subtle uppercase mb-1 tracking-widest">Próx. Vencimento</p>
-                    <p className="text-[10px] font-black italic text-text-main/70 uppercase">
-                      {currentSubscription?.next_billing_at ? new Date(currentSubscription.next_billing_at).toLocaleDateString('pt-BR') : '---'}
-                    </p>
-                  </div>
-                </div>
+                <button
+                  onClick={() => setActiveTab('financeiro')}
+                  className="w-full py-3 bg-surface-soft border border-border-main rounded-xl flex items-center justify-center gap-2 hover:border-primary/40 transition-all group"
+                >
+                  <span className="text-[8px] font-black uppercase text-text-subtle group-hover:text-text-main">Gerenciar Financeiro</span>
+                  <ChevronRight className="w-3 h-3 text-text-subtle" />
+                </button>
               </div>
             </div>
 
             {/* DOCUMENTOS */}
-            <div className="bg-surface border border-border-main rounded-[32px] p-5 shadow-sm flex flex-col backdrop-blur-xl">
-              <div className="flex items-center gap-2 mb-4">
-                <FileText className="w-3.5 h-3.5 text-primary" />
-                <h3 className="text-[9px] font-black uppercase text-text-main tracking-widest">Documentos</h3>
+            <div className="bg-surface border border-border-main rounded-[32px] p-6 shadow-sm backdrop-blur-xl flex flex-col h-full max-h-[500px]">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary" />
+                  <h3 className="text-[9px] font-black uppercase tracking-[0.2em] text-text-main">Dossiê de Documentos</h3>
+                </div>
+                <button
+                  onClick={() => setIsDocumentModalOpen(true)}
+                  className="p-1.5 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all"
+                >
+                  <Plus className="w-3 h-3 text-primary" />
+                </button>
               </div>
 
-              <div className="space-y-1.5 mb-4 overflow-y-auto max-h-[180px] no-scrollbar">
-                {(athlete as any).documents_json && (athlete as any).documents_json.length > 0 ? (
-                  (athlete as any).documents_json.map((doc: any, i: number) => (
-                    <div
-                      key={i}
-                      onClick={() => window.open(doc.url, '_blank')}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-surface-soft border border-border-main group/doc cursor-pointer hover:bg-surface-strong transition-all"
-                    >
-                      <div className="flex flex-col">
-                        <p className="text-[8px] font-black uppercase text-text-main tracking-tighter truncate max-w-[150px]">{doc.name}</p>
-                        <p className="text-[6px] font-bold uppercase text-primary/70 tracking-widest">{doc.category || 'Documento'}</p>
+              <div className="space-y-2.5 overflow-y-auto pr-1 no-scrollbar">
+                {athlete.documents_json && athlete.documents_json.length > 0 ? (
+                  athlete.documents_json.map((doc: any, i: number) => (
+                    <div key={i} className="p-3.5 bg-surface-soft border border-border-main rounded-2xl flex items-center justify-between group hover:border-primary/30 transition-all cursor-default">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <div className="p-2 bg-primary/5 rounded-lg">
+                          <FileText className="w-3.5 h-3.5 text-primary" />
+                        </div>
+                        <div className="overflow-hidden">
+                          <p className="text-[10px] font-black italic text-text-main uppercase truncate tracking-tight">{doc.name}</p>
+                          <p className="text-[7px] font-bold text-text-subtle uppercase tracking-widest">{doc.category || 'Anexo'}</p>
+                        </div>
                       </div>
-                      <Download className="w-3 h-3 text-text-subtle group-hover/doc:text-primary transition-colors" />
+                      <button
+                        onClick={() => window.open(doc.url, '_blank')}
+                        className="p-2 bg-surface border border-border-main rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:border-primary/40"
+                      >
+                        <Download className="w-3 h-3 text-text-subtle" />
+                      </button>
                     </div>
                   ))
                 ) : (
-                  <div className="py-6 text-center border border-dashed border-border-main rounded-xl">
-                    <p className="text-[8px] font-black uppercase text-text-muted tracking-widest">Nenhum documento</p>
+                  <div className="flex flex-col items-center justify-center py-12 text-center opacity-40">
+                    <Layers className="w-8 h-8 text-text-subtle mb-3" />
+                    <p className="text-[8px] font-black uppercase tracking-widest text-text-subtle">Nenhum documento anexado</p>
                   </div>
                 )}
-              </div>
-
-              <div className="mt-auto pt-4 border-t border-border-main">
-                <button
-                  onClick={() => setIsDocumentModalOpen(true)}
-                  className="w-full bg-primary/5 border border-primary/20 border-dashed rounded-xl p-3 flex flex-col items-center justify-center group cursor-pointer hover:bg-primary/10 text-center transition-all"
-                >
-                  <Plus className="w-4 h-4 text-primary mb-1 group-hover:scale-110 transition-transform" />
-                  <p className="text-[8px] font-black italic text-primary-dark uppercase tracking-widest">Novo Documento</p>
-                </button>
               </div>
             </div>
           </div>
 
-        </div>
+          </div>
+        )}
+
+        {/* ABA FINANCEIRO */}
+        {activeTab === 'financeiro' && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* CARD MENSALIDADE ATIVA */}
+              <div className="lg:col-span-2 bg-surface border border-border-main rounded-[32px] p-8 shadow-sm relative overflow-hidden group backdrop-blur-xl">
+                <div className="absolute top-0 right-0 p-8">
+                  <CreditCard className="w-24 h-24 text-primary/5 -rotate-12 absolute -top-4 -right-4" />
+                </div>
+
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-10">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+                        <Zap className="w-7 h-7 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-black uppercase tracking-[0.2em] text-text-main italic">Assinatura Ativa</h3>
+                        <p className="text-[10px] font-bold text-text-subtle uppercase tracking-widest">Status do Plano</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setIsMembershipModalOpen(true)}
+                        className="px-6 py-2.5 rounded-xl bg-surface-soft border border-border-main hover:border-primary/40 transition-all text-[10px] font-black uppercase tracking-widest text-text-main flex items-center gap-2"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-primary" />
+                        Alterar Plano
+                      </button>
+                      <button
+                        onClick={() => openConfirmModal({
+                          title: "Cancelar Mensalidade?",
+                          description: "Esta ação interromperá as cobranças futuras. O atleta perderá o acesso aos benefícios do plano ao final do ciclo atual.",
+                          type: "danger",
+                          onConfirm: handleCancelSubscription
+                        })}
+                        className="px-6 py-2.5 rounded-xl bg-red-500/5 border border-red-500/20 hover:bg-red-500/10 transition-all text-[10px] font-black uppercase tracking-widest text-red-500 flex items-center gap-2"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="bg-surface-soft/50 border border-border-main p-6 rounded-[24px]">
+                      <p className="text-[8px] font-black uppercase text-text-subtle tracking-[0.2em] mb-2">Plano Atual</p>
+                      <h4 className="text-xl font-black italic text-text-main uppercase tracking-tighter leading-tight">
+                        {currentSubscription?.status === 'free' ? 'PLANO DE ISENÇÃO' : (currentSubscription?.plan?.membership?.name || 'Clube')}
+                      </h4>
+                      <p className="text-xs font-bold text-primary uppercase mt-1">
+                        {currentSubscription?.status === 'free' ? 'ISENÇÃO TOTAL' : (currentSubscription?.plan?.name || 'Sem Plano Ativo')}
+                      </p>
+                    </div>
+
+                    <div className="bg-surface-soft/50 border border-border-main p-6 rounded-[24px]">
+                      <p className="text-[8px] font-black uppercase text-text-subtle tracking-[0.2em] mb-2">Valor da Parcela</p>
+                      <h4 className="text-2xl font-black italic text-text-main tracking-tighter">
+                        {currentSubscription?.status === 'free' ? 'ISENTO' : `R$ ${currentSubscription?.plan?.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}`}
+                      </h4>
+                      <p className="text-[9px] font-bold text-text-muted uppercase mt-1">
+                        Cobrança {currentSubscription?.status === 'free' ? 'N/A' : (currentSubscription?.plan?.billing_period === 'monthly' ? 'Mensal' : 'Recorrente')}
+                      </p>
+                    </div>
+
+                    <div className="bg-surface-soft/50 border border-border-main p-6 rounded-[24px]">
+                      <p className="text-[8px] font-black uppercase text-text-subtle tracking-[0.2em] mb-2">Próximo Vencimento</p>
+                      <h4 className="text-2xl font-black italic text-text-main tracking-tighter">
+                        {currentSubscription?.status === 'free' ? 'N/A' : (currentSubscription?.next_billing_at ? new Date(currentSubscription.next_billing_at).toLocaleDateString('pt-BR') : (currentSubscription?.due_day ? `DIA ${currentSubscription.due_day}` : '---'))}
+                      </h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className={cn(
+                          "w-2 h-2 rounded-full animate-pulse",
+                          currentSubscription?.status === 'free' ? "bg-primary" : (currentSubscription?.status === 'active' ? "bg-emerald-500" : "bg-primary")
+                        )} />
+                        <p className="text-[9px] font-bold text-text-muted uppercase">
+                          {currentSubscription?.status === 'free' ? 'ISENTO' : (currentSubscription?.status === 'active' ? 'Em dia' : 'Aguardando')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD RESPONSÁVEL */}
+              <div className="bg-surface border border-border-main rounded-[32px] p-8 shadow-sm backdrop-blur-xl">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-main mb-6 flex items-center gap-2">
+                  <UserIcon className="w-4 h-4 text-primary" />
+                  Responsável pelo Pagamento
+                </h3>
+
+                <div className="space-y-5">
+                  <div className="p-4 bg-surface-soft border border-border-main rounded-2xl">
+                    <p className="text-[7px] font-black text-text-subtle uppercase tracking-widest mb-1">Nome Completo</p>
+                    <p className="text-xs font-black italic text-text-main uppercase">{currentSubscription?.payer_name || athlete.full_name}</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <button
+                      onClick={() => window.open(`https://wa.me/${currentSubscription?.payer_phone?.replace(/\D/g, '') || athlete.whatsapp?.replace(/\D/g, '')}`, '_blank')}
+                      className="flex items-center gap-3 p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl hover:bg-emerald-500/10 transition-all group w-full text-left"
+                    >
+                      <div className="p-2 bg-emerald-500/20 rounded-lg group-hover:scale-110 transition-transform">
+                        <MessageSquare className="w-4 h-4 text-emerald-500" />
+                      </div>
+                      <div>
+                        <p className="text-[7px] font-black text-emerald-600 uppercase tracking-widest">WhatsApp</p>
+                        <p className="text-xs font-black italic text-text-main">{currentSubscription?.payer_phone || athlete.whatsapp || 'Não informado'}</p>
+                      </div>
+                    </button>
+
+                    <div className="flex items-center gap-3 p-4 bg-surface-soft border border-border-main rounded-2xl group">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <Mail className="w-4 h-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-[7px] font-black text-text-subtle uppercase tracking-widest">E-mail de Cobrança</p>
+                        <p className="text-xs font-black italic text-text-main lowercase truncate max-w-[180px]">
+                          {currentSubscription?.payer_email || athlete.email || 'Não informado'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ALERTAS E HISTÓRICO */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              {/* ALERTAS */}
+              <div className="lg:col-span-1 space-y-4">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-main ml-2 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-primary" />
+                  Alertas Financeiros
+                </h3>
+
+                {payments.some(p => p.status === 'overdue') ? (
+                  <div className="p-5 bg-red-500/10 border border-red-500/20 rounded-[24px] flex items-start gap-4 animate-pulse">
+                    <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0" />
+                    <div>
+                      <h4 className="text-[10px] font-black uppercase text-red-600 mb-1">Pagamento Atrasado</h4>
+                      <p className="text-[9px] font-bold text-red-500/80 uppercase leading-relaxed">
+                        Existem faturas pendentes. O acesso do atleta pode ser restrito em breve.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-5 bg-emerald-500/5 border border-emerald-500/10 rounded-[24px] flex items-start gap-4">
+                    <ShieldCheck className="w-6 h-6 text-emerald-500 flex-shrink-0" />
+                    <div>
+                      <h4 className="text-[10px] font-black uppercase text-emerald-600 mb-1">Situação Regular</h4>
+                      <p className="text-[9px] font-bold text-emerald-500/80 uppercase leading-relaxed">
+                        Nenhuma pendência financeira encontrada para este atleta.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-5 bg-surface border border-border-main rounded-[24px]">
+                  <h4 className="text-[9px] font-black uppercase text-text-main mb-4 border-b border-border-main pb-2">Próximas Faturas</h4>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-3 h-3 text-text-subtle" />
+                        <span className="text-[10px] font-bold text-text-muted uppercase">
+                          {currentSubscription?.next_billing_at ? new Date(currentSubscription.next_billing_at).toLocaleDateString('pt-BR') : '---'}
+                        </span>
+                      </div>
+                      <span className="text-[9px] font-black italic text-primary">R$ {currentSubscription?.plan?.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* HISTÓRICO DE PAGAMENTOS */}
+              <div className="lg:col-span-3 bg-surface border border-border-main rounded-[32px] overflow-hidden shadow-sm backdrop-blur-xl">
+                <div className="p-6 border-b border-border-main bg-surface-soft/30 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <History className="w-4 h-4 text-primary" />
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-main">Histórico de Pagamentos</h3>
+                  </div>
+                  <span className="text-[8px] font-black uppercase bg-primary/10 text-primary-dark px-3 py-1 rounded-full">
+                    {payments.length} Registros
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-border-main">
+                        <th className="px-6 py-4 text-[8px] font-black uppercase text-text-subtle tracking-[0.2em]">Fatura</th>
+                        <th className="px-6 py-4 text-[8px] font-black uppercase text-text-subtle tracking-[0.2em]">Vencimento</th>
+                        <th className="px-6 py-4 text-[8px] font-black uppercase text-text-subtle tracking-[0.2em]">Pagamento</th>
+                        <th className="px-6 py-4 text-[8px] font-black uppercase text-text-subtle tracking-[0.2em]">Valor</th>
+                        <th className="px-6 py-4 text-[8px] font-black uppercase text-text-subtle tracking-[0.2em]">Método</th>
+                        <th className="px-6 py-4 text-[8px] font-black uppercase text-text-subtle tracking-[0.2em]">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-main/50">
+                      {payments.length > 0 ? payments.map((payment) => (
+                        <tr key={payment.id} className="hover:bg-surface-soft/50 transition-colors group">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <Receipt className="w-3 h-3 text-text-subtle group-hover:text-primary transition-colors" />
+                              <span className="text-[10px] font-black text-text-main uppercase tracking-tighter">#{payment.id.substring(0, 8)}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-[10px] font-bold text-text-muted uppercase">
+                            {new Date(payment.due_date).toLocaleDateString('pt-BR')}
+                          </td>
+                          <td className="px-6 py-4 text-[10px] font-bold text-text-muted uppercase">
+                            {payment.paid_at ? new Date(payment.paid_at).toLocaleDateString('pt-BR') : '---'}
+                          </td>
+                          <td className="px-6 py-4 text-[10px] font-black italic text-text-main">
+                            R$ {payment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-[8px] font-black uppercase px-2 py-1 bg-surface-soft border border-border-main rounded-md text-text-subtle">
+                              {payment.payment_method || 'PIX'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <div className={cn(
+                                "w-1.5 h-1.5 rounded-full",
+                                payment.status === 'paid' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" :
+                                  payment.status === 'overdue' ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" :
+                                    "bg-primary shadow-[0_0_8px_rgba(189,255,1,0.5)]"
+                              )} />
+                              <span className={cn(
+                                "text-[9px] font-black uppercase italic tracking-widest",
+                                payment.status === 'paid' ? "text-emerald-500" :
+                                  payment.status === 'overdue' ? "text-red-500" :
+                                    "text-primary-dark"
+                              )}>
+                                {payment.status === 'paid' ? 'Pago' :
+                                  payment.status === 'overdue' ? 'Atrasado' : 'Aberto'}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-12 text-center">
+                            <p className="text-[10px] font-black uppercase text-text-subtle tracking-[0.2em]">Nenhuma fatura registrada</p>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ABA PERFORMANCE (Placeholder) */}
+        {activeTab === 'performance' && (
+          <div className="bg-surface border border-border-main rounded-[32px] p-20 flex flex-col items-center justify-center text-center animate-in zoom-in-95 duration-500">
+            <TrendingUp className="w-16 h-16 text-primary mb-6 animate-bounce" />
+            <h2 className="text-2xl font-black uppercase italic tracking-tighter text-text-main mb-2">Análise de Performance</h2>
+            <p className="text-xs font-bold text-text-subtle uppercase tracking-widest max-w-sm">
+              Módulo de scout e evolução técnica em processamento. Em breve dados completos de jogos e treinos.
+            </p>
+          </div>
+        )}
       </div>
+
+      {/* MODAL DE CONFIRMAÇÃO GENÉRICO */}
+      {isConfirmModalOpen && confirmConfig && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-surface w-full max-w-md rounded-[32px] border border-border-main overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="p-8 text-center">
+              <div className={cn(
+                "w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6",
+                confirmConfig.type === 'danger' ? "bg-red-500/10 text-red-500" :
+                  confirmConfig.type === 'warning' ? "bg-primary/10 text-primary" : "bg-blue-500/10 text-blue-500"
+              )}>
+                {confirmConfig.type === 'danger' ? <Trash2 size={40} /> : <AlertTriangle size={40} />}
+              </div>
+              <h3 className="text-xl font-black uppercase italic tracking-tighter text-text-main mb-3">
+                {confirmConfig.title}
+              </h3>
+              <p className="text-[10px] font-bold text-text-subtle uppercase leading-relaxed tracking-wider px-4">
+                {confirmConfig.description}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 border-t border-border-main">
+              <button
+                onClick={() => setIsConfirmModalOpen(false)}
+                className="py-6 text-[10px] font-black uppercase tracking-widest text-text-muted hover:bg-surface-soft transition-colors border-r border-border-main"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmConfig.onConfirm}
+                className={cn(
+                  "py-6 text-[10px] font-black uppercase tracking-widest transition-colors",
+                  confirmConfig.type === 'danger' ? "text-red-500 hover:bg-red-500/10" : "text-primary hover:bg-primary/10"
+                )}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
@@ -849,28 +1290,37 @@ export default function PerfilAtleta() {
                             placeholder="Ex: Nome do Pai ou Mãe"
                           />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1.5">
-                            <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">WhatsApp / Celular</label>
-                            <input
-                              value={payerPhone}
-                              onChange={(e) => setPayerPhone(e.target.value.replace(/\D/g, '').replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2').substring(0, 15))}
-                              className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
-                              placeholder="(00) 00000-0000"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">E-mail</label>
-                            <input
-                              type="email"
-                              value={payerEmail}
-                              onChange={(e) => setPayerEmail(e.target.value)}
-                              className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
-                              placeholder="pagamento@email.com"
-                            />
+                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">WhatsApp</label>
+                              <input
+                                value={payerPhone}
+                                onChange={(e) => setPayerPhone(e.target.value.replace(/\D/g, '').replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2').substring(0, 15))}
+                                className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                                placeholder="(00) 00000-0000"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">E-mail</label>
+                              <input
+                                type="email"
+                                value={payerEmail}
+                                onChange={(e) => setPayerEmail(e.target.value)}
+                                className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                                placeholder="pagamento@email.com"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">CPF do Pagador</label>
+                              <input
+                                value={payerCpf}
+                                onChange={(e) => setPayerCpf(e.target.value.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').substring(0, 14))}
+                                className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
+                                placeholder="000.000.000-00"
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
 
                       {!isFree && (
                         <div className="space-y-5 pt-4 border-t border-[var(--border)]">
@@ -901,18 +1351,7 @@ export default function PerfilAtleta() {
                           {/* Seção Cartão: Dados do Pagador Avançados + Cartão */}
                           {paymentMethod === 'card' && (
                             <div className="space-y-6 animate-in slide-in-from-top-4 duration-500">
-                              <div className="pt-4 border-t border-border-main/50">
-                                <p className="text-[8px] font-black uppercase text-primary tracking-[0.2em] mb-4">Dados Fiscais do Pagador</p>
-                                <div className="grid grid-cols-1 gap-4">
-                                  <div className="space-y-1.5">
-                                    <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">CPF do Pagador</label>
-                                    <input
-                                      value={payerCpf}
-                                      onChange={(e) => setPayerCpf(e.target.value.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').substring(0, 14))}
-                                      className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary transition-all text-[var(--text)]"
-                                      placeholder="000.000.000-00"
-                                    />
-                                  </div>
+
 
                                   <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
@@ -955,8 +1394,6 @@ export default function PerfilAtleta() {
                                       />
                                     </div>
                                   </div>
-                                </div>
-                              </div>
 
                               <div className="pt-4 border-t border-border-main/50">
                                 <p className="text-[8px] font-black uppercase text-primary tracking-[0.2em] mb-4">Dados do Cartão de Crédito</p>
@@ -1018,7 +1455,7 @@ export default function PerfilAtleta() {
 
                   <div className="mt-auto pt-6 border-t border-[var(--border)]">
                     <button
-                      onClick={handleSaveSubscription}
+                      onClick={handleConfirmSaveSubscription}
                       disabled={isSavingSubscription || (!isFree && !selectedPlanId)}
                       className="w-full py-5 bg-primary text-black rounded-[24px] text-[11px] font-black uppercase tracking-[0.2em] hover:scale-[1.02] active:scale-[0.98] transition-all shadow-2xl shadow-primary/30 flex items-center justify-center gap-3 disabled:opacity-50"
                     >
