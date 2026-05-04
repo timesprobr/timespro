@@ -308,7 +308,12 @@ export default function PerfilAtleta() {
           athlete_id: id,
           organization_id: organization.id,
           plan_id: isFree ? null : selectedPlanId,
-          next_billing_at: isFree ? null : new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString(),
+          next_billing_at: isFree ? null : (() => {
+            const date = new Date();
+            date.setMonth(date.getMonth() + 1);
+            date.setDate(parseInt(dueDay));
+            return date.toISOString();
+          })(),
           status: isFree ? 'free' : 'active',
           payer_name: payerName,
           payer_phone: payerPhone,
@@ -872,16 +877,16 @@ export default function PerfilAtleta() {
                   <div className="p-3 bg-surface-soft border border-border-main rounded-xl">
                     <p className="text-[7px] font-black text-text-subtle uppercase tracking-widest mb-1">Vencimento</p>
                     <p className="text-[10px] font-black text-text-main italic uppercase">
-                      {currentSubscription?.status === 'free' ? 'N/A' : (currentSubscription?.next_billing_at ? new Date(currentSubscription.next_billing_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : (currentSubscription?.due_day ? `DIA ${currentSubscription.due_day}` : '---'))}
+                      {currentSubscription?.status === 'free' ? 'N/A' : (currentSubscription?.due_day ? `Todo dia ${currentSubscription.due_day}` : (currentSubscription?.next_billing_at ? new Date(currentSubscription.next_billing_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '---'))}
                     </p>
                   </div>
                 </div>
 
                 <button
                   onClick={() => setIsMembershipModalOpen(true)}
-                  className="w-full py-3 bg-primary rounded-xl flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(189,255,1,0.2)] hover:scale-[1.02] transition-all group"
+                  className="w-full py-3 bg-primary rounded-xl flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(189,255,1,0.2)] hover:scale-[1.02] active:scale-[0.98] transition-all group"
                 >
-                  <span className="text-black font-black italic uppercase text-[9px] tracking-widest">
+                  <span className="text-black font-black italic uppercase text-[10px] tracking-widest">
                     {currentSubscription ? 'Alterar' : 'Selecionar Plano'}
                   </span>
                   <ChevronRight className="w-3.5 h-3.5 text-black group-hover:translate-x-1 transition-transform" />

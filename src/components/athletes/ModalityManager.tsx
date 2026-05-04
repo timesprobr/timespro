@@ -3,6 +3,8 @@ import { X, Plus, Trash2, Trophy, Target, ChevronRight, Loader2, Tag } from 'luc
 import { supabase } from '../../lib/supabase';
 import { useOrg } from '../../context/OrgContext';
 import { cn } from '../../lib/utils';
+import Toast from '../Toast';
+import ConfirmModal from '../ConfirmModal';
 
 interface Modality {
   id: string;
@@ -43,6 +45,12 @@ export default function ModalityManager({ onClose, onUpdate }: ModalityManagerPr
   const [newMin, setNewMin] = useState('');
   const [newMax, setNewMax] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+  };
 
   useEffect(() => {
     if (organization) {
@@ -88,8 +96,9 @@ export default function ModalityManager({ onClose, onUpdate }: ModalityManagerPr
       setNewName('');
       fetchAll();
       if (data) setSelectedModality(data[0]);
+      showToast('Modalidade criada!');
     } catch (err: any) {
-      alert('Erro ao criar modalidade: ' + err.message);
+      showToast('Erro ao criar modalidade: ' + err.message, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -111,13 +120,12 @@ export default function ModalityManager({ onClose, onUpdate }: ModalityManagerPr
         }]);
 
       if (error) throw error;
-      setNewName('');
-      setNewMin('');
       setNewMax('');
       fetchAll();
       onUpdate();
+      showToast('Categoria criada!');
     } catch (err: any) {
-      alert('Erro ao criar categoria: ' + err.message);
+      showToast('Erro ao criar categoria: ' + err.message, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -140,22 +148,33 @@ export default function ModalityManager({ onClose, onUpdate }: ModalityManagerPr
       setNewName('');
       fetchAll();
       onUpdate();
+      showToast('Posição criada!');
     } catch (err: any) {
-      alert('Erro ao criar posição: ' + err.message);
+      showToast('Erro ao criar posição: ' + err.message, 'error');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleDelete = async (table: string, id: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir?')) return;
+  const handleDelete = (table: string, id: string) => {
+    setConfirmModal({
+      title: 'Confirmar Exclusão',
+      message: 'Tem certeza que deseja excluir este item? Esta ação não pode ser desfeita.',
+      onConfirm: () => executeDelete(table, id)
+    });
+  };
+
+  const executeDelete = async (table: string, id: string) => {
     try {
       const { error } = await supabase!.from(table).delete().eq('id', id);
       if (error) throw error;
       fetchAll();
       onUpdate();
+      showToast('Item excluído com sucesso!');
     } catch (err: any) {
-      alert('Erro ao excluir: ' + err.message);
+      showToast('Erro ao excluir: ' + err.message, 'error');
+    } finally {
+      setConfirmModal(null);
     }
   };
 
@@ -363,6 +382,17 @@ export default function ModalityManager({ onClose, onUpdate }: ModalityManagerPr
           </div>
         </div>
       </div>
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {confirmModal && (
+        <ConfirmModal
+          isOpen={true}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          onConfirm={confirmModal.onConfirm}
+          onClose={() => setConfirmModal(null)}
+        />
+      )}
     </div>
   );
 }

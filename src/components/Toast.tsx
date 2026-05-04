@@ -27,21 +27,21 @@ export default function Toast({ message, type, onClose, duration = 3000 }: Toast
   };
 
   const backgrounds = {
-    success: 'border-primary/20 bg-primary/5',
-    error: 'border-rose-500/20 bg-rose-500/5',
-    info: 'border-blue-500/20 bg-blue-500/5'
+    success: 'border-primary bg-zinc-950 shadow-primary/10',
+    error: 'border-rose-500 bg-zinc-950 shadow-rose-500/20',
+    info: 'border-blue-500 bg-zinc-950 shadow-blue-500/10'
   };
 
   return (
     <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-4 duration-300">
       <div className={cn(
-        "flex items-center gap-3 px-6 py-3 rounded-2xl border backdrop-blur-md shadow-2xl min-w-[300px]",
+        "flex items-center gap-3 px-6 py-3 rounded-2xl border backdrop-blur-xl shadow-2xl min-w-[320px]",
         backgrounds[type]
       )}>
         <div className="flex-shrink-0">
           {icons[type]}
         </div>
-        <p className="text-[11px] font-black uppercase tracking-widest text-zinc-900 dark:text-white flex-1 italic">
+        <p className="text-[10px] font-black uppercase tracking-widest text-white flex-1 italic leading-tight">
           {message}
         </p>
         <button 

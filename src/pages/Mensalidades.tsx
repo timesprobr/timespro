@@ -16,6 +16,7 @@ import { supabase } from '../lib/supabase';
 import { useOrg } from '../context/OrgContext';
 import { cn } from '../lib/utils';
 import Toast from '../components/Toast';
+import ConfirmModal from '../components/ConfirmModal';
 
 interface MembershipPlan {
   id: string;
@@ -76,6 +77,19 @@ export default function Mensalidades() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
+
+  // Confirm Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
 
   const maskCurrency = (v: string) => {
     v = v.replace(/\D/g, "");
@@ -177,16 +191,22 @@ export default function Mensalidades() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir esta mensalidade? Todos os planos vinculados também serão removidos.')) return;
-    try {
-      const { error } = await supabase!.from('memberships').delete().eq('id', id);
-      if (error) throw error;
-      showToast('Mensalidade excluída com sucesso!');
-      fetchMemberships();
-    } catch (err: any) {
-      console.error(err);
-      showToast('Erro ao excluir: ' + err.message, 'error');
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Excluir Mensalidade',
+      message: 'Deseja realmente excluir esta mensalidade? Todos os planos vinculados também serão removidos.',
+      onConfirm: async () => {
+        try {
+          const { error } = await supabase!.from('memberships').delete().eq('id', id);
+          if (error) throw error;
+          showToast('Mensalidade excluída com sucesso!');
+          fetchMemberships();
+        } catch (err: any) {
+          console.error(err);
+          showToast('Erro ao excluir: ' + err.message, 'error');
+        }
+      }
+    });
   };
 
   const handleAssign = async () => {
@@ -221,7 +241,31 @@ export default function Mensalidades() {
     setIsSaving(true);
 
     try {
-      if (editingId) {
+      // VALIDATE BEFORE ANY DATABASE ACTION
+      for (const p of mPlans) {
+        const amount = parseFloat(p.amount.replace(/\./g, '').replace(',', '.'));
+        if (isNaN(amount) || amount < 30) {
+          throw new Error(`O valor mínimo para qualquer plano deve ser R$ 30,00. O plano "${p.name || 'Principal'}" está com R$ ${p.amount || '0,00'}.`);
+        }
+      }
+
+      // 1. Verificar se já existe uma mensalidade com este nome para esta organização (Prevenção de duplicidade)
+      let membershipId = editingId;
+      
+      if (!editingId) {
+        const { data: existing } = await supabase!
+          .from('memberships')
+          .select('id')
+          .eq('organization_id', organization.id)
+          .eq('name', mName)
+          .maybeSingle();
+        
+        if (existing) {
+          membershipId = existing.id;
+        }
+      }
+
+      if (membershipId) {
         // UPDATE MODE
         const { error: mError } = await supabase!
           .from('memberships')
@@ -231,30 +275,9 @@ export default function Mensalidades() {
             modality_id: mModalityId || null,
             category_id: mCategoryId || null
           })
-          .eq('id', editingId);
+          .eq('id', membershipId);
 
         if (mError) throw mError;
-
-        // For plans: This is trickier. Let's handle simple update/insert
-        for (const p of mPlans) {
-          const planData = {
-            organization_id: organization.id,
-            membership_id: editingId,
-            name: p.name,
-            amount: parseFloat(p.amount.replace(/\./g, '').replace(',', '.')),
-            billing_period: p.billing_period
-          };
-
-          if (planData.amount < 30) {
-            throw new Error(`O valor mínimo para qualquer plano deve ser R$ 30,00. O plano "${p.name}" está com R$ ${p.amount}.`);
-          }
-
-          if ((p as any).id) {
-            await supabase!.from('membership_plans').update(planData).eq('id', (p as any).id);
-          } else {
-            await supabase!.from('membership_plans').insert(planData);
-          }
-        }
       } else {
         // CREATE MODE
         const { data: membership, error: mError } = await supabase!
@@ -270,28 +293,36 @@ export default function Mensalidades() {
           .single();
 
         if (mError) throw mError;
+        membershipId = membership.id;
+      }
 
-        // Validate minimum amount
-        for (const p of mPlans) {
-          const amount = parseFloat(p.amount.replace(/\./g, '').replace(',', '.'));
-          if (amount < 30) {
-            throw new Error(`O valor mínimo para qualquer plano deve ser R$ 30,00. O plano "${p.name}" está com R$ ${p.amount}.`);
-          }
-        }
-
-        const plansToInsert = mPlans.map(p => ({
+      // For plans: handle update/insert
+      for (const p of mPlans) {
+        const planData = {
           organization_id: organization.id,
-          membership_id: membership.id,
+          membership_id: membershipId,
           name: p.name,
           amount: parseFloat(p.amount.replace(/\./g, '').replace(',', '.')),
           billing_period: p.billing_period
-        }));
+        };
 
-        const { error: pError } = await supabase!
-          .from('membership_plans')
-          .insert(plansToInsert);
+        if ((p as any).id) {
+          await supabase!.from('membership_plans').update(planData).eq('id', (p as any).id);
+        } else {
+          // Antes de inserir, verifica se este plano já não existe para esta mensalidade
+          const { data: existingPlan } = await supabase!
+            .from('membership_plans')
+            .select('id')
+            .eq('membership_id', membershipId)
+            .eq('name', p.name)
+            .maybeSingle();
 
-        if (pError) throw pError;
+          if (existingPlan) {
+            await supabase!.from('membership_plans').update(planData).eq('id', existingPlan.id);
+          } else {
+            await supabase!.from('membership_plans').insert(planData);
+          }
+        }
       }
       
       setIsModalOpen(false);
@@ -376,15 +407,7 @@ export default function Mensalidades() {
                     <Edit3 size={16} />
                   </button>
                   <button 
-                    onClick={async () => {
-                      if (confirm('Deseja realmente excluir esta mensalidade e todos os seus planos?')) {
-                        const { error } = await supabase!.from('memberships').delete().eq('id', membership.id);
-                        if (!error) {
-                          showToast('Mensalidade excluída com sucesso!');
-                          fetchMemberships();
-                        }
-                      }
-                    }}
+                    onClick={() => handleDelete(membership.id)}
                     className="p-2 text-[var(--text-muted)] hover:text-rose-500 transition-colors bg-[var(--surface-soft)] rounded-xl"
                   >
                     <Trash2 size={16} />
@@ -752,6 +775,15 @@ export default function Mensalidades() {
           </div>
         </div>
       )}
+      {/* Modal de Confirmação */}
+      <ConfirmModal 
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.onConfirm}
+      />
+
       {/* Notificação Toast */}
       {toast && (
         <Toast 

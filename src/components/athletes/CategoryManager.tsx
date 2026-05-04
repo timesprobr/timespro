@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2, Tag, Hash } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useOrg } from '../../context/OrgContext';
+import Toast from '../Toast';
+import ConfirmModal from '../ConfirmModal';
 
 interface Category {
   id: string;
@@ -22,6 +24,12 @@ export default function CategoryManager({ onClose, onUpdate }: CategoryManagerPr
   const [newName, setNewName] = useState('');
   const [newMin, setNewMin] = useState('');
   const [newMax, setNewMax] = useState('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+  };
 
   const fetchCategories = async () => {
     if (!organization) return;
@@ -63,13 +71,21 @@ export default function CategoryManager({ onClose, onUpdate }: CategoryManagerPr
       setNewMax('');
       fetchCategories();
       onUpdate();
+      showToast('Categoria criada com sucesso!');
     } catch (err: any) {
-      alert('Erro ao criar categoria: ' + err.message);
+      showToast('Erro ao criar categoria: ' + err.message, 'error');
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir esta categoria?')) return;
+  const handleDelete = (id: string) => {
+    setConfirmModal({
+      title: 'Excluir Categoria',
+      message: 'Tem certeza que deseja excluir esta categoria? Esta ação não pode ser desfeita.',
+      onConfirm: () => executeDelete(id)
+    });
+  };
+
+  const executeDelete = async (id: string) => {
     try {
       const { error } = await supabase!
         .from('categories')
@@ -78,8 +94,11 @@ export default function CategoryManager({ onClose, onUpdate }: CategoryManagerPr
       if (error) throw error;
       fetchCategories();
       onUpdate();
+      showToast('Categoria excluída com sucesso!');
     } catch (err: any) {
-      alert('Erro ao excluir: ' + err.message);
+      showToast('Erro ao excluir: ' + err.message, 'error');
+    } finally {
+      setConfirmModal(null);
     }
   };
 
@@ -173,6 +192,17 @@ export default function CategoryManager({ onClose, onUpdate }: CategoryManagerPr
           </div>
         </div>
       </div>
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {confirmModal && (
+        <ConfirmModal
+          isOpen={true}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          onConfirm={confirmModal.onConfirm}
+          onClose={() => setConfirmModal(null)}
+        />
+      )}
     </div>
   );
 }
