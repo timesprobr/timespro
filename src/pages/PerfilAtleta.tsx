@@ -333,7 +333,24 @@ export default function PerfilAtleta() {
       // 2. Se não for free, processar cobrança inicial via Edge Function
       if (!isFree) {
         const selectedPlan = memberships.flatMap(m => m.plans).find(p => p.id === selectedPlanId);
+        
+        // 2.1 Registrar a fatura no banco local PRIMEIRO para ter o ID (externalId do webhook)
+        const { data: localPayment, error: payError } = await supabase!
+          .from('subscription_payments')
+          .insert({
+            organization_id: organization.id,
+            subscription_id: subData.id,
+            amount: selectedPlan?.amount || 0,
+            due_date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(parseInt(dueDay)).padStart(2, '0')}`,
+            status: 'pending',
+            payment_method: paymentMethod
+          })
+          .select()
+          .single();
 
+        if (payError) throw payError;
+
+        // 2.2 Chamar AbacatePay enviando o ID local como externalId
         const { data: billingData, error: billingError } = await supabase!.functions.invoke('create-billing', {
           body: {
             amountCentavos: (selectedPlan?.amount || 0) * 100,
@@ -352,7 +369,7 @@ export default function PerfilAtleta() {
               state: payerState
             },
             description: `Assinatura: ${selectedPlan?.name}`,
-            externalId: `sub_${id}_${Date.now()}`,
+            externalId: localPayment.id, // IMPORTANTE: O webhook vai buscar por esse ID
             card: paymentMethod === 'card' ? {
               number: cardNumber.replace(/\s/g, ''),
               holder: cardHolder,
@@ -362,26 +379,25 @@ export default function PerfilAtleta() {
           }
         });
 
-        if (billingError) throw billingError;
-        if (!billingData.success) throw new Error(billingData.error);
+        if (billingError) {
+          // Se falhou no AbacatePay, removemos a fatura local pendente para não sujar o histórico
+          await supabase!.from('subscription_payments').delete().eq('id', localPayment.id);
+          throw billingError;
+        }
+        
+        if (!billingData.success) {
+          await supabase!.from('subscription_payments').delete().eq('id', localPayment.id);
+          throw new Error(billingData.error);
+        }
 
-        // 3. Registrar a fatura no banco local para aparecer no histórico
+        // 2.3 Atualizar a fatura local com o ID retornado pelo AbacatePay
         const abacateData = billingData.data?.billing || billingData.data;
         const abacateId = abacateData?.id || abacateData?.pix?.id;
 
-        const { error: payError } = await supabase!
+        await supabase!
           .from('subscription_payments')
-          .insert({
-            organization_id: organization.id,
-            subscription_id: subData.id,
-            amount: selectedPlan?.amount || 0,
-            due_date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(parseInt(dueDay)).padStart(2, '0')}`,
-            status: 'pending',
-            payment_method: paymentMethod,
-            external_id: abacateId
-          });
-
-        if (payError) console.error('Erro ao registrar fatura local:', payError);
+          .update({ external_id: abacateId })
+          .eq('id', localPayment.id);
 
         if (paymentMethod === 'pix' && billingData.data?.pix) {
           showToast('Assinatura criada! Use o QR Code para pagar.', 'success');
@@ -1098,7 +1114,7 @@ export default function PerfilAtleta() {
                               <button
                                 onClick={() => {
                                   const athleteName = (athlete.nickname || athlete.full_name.split(' ')[0] || 'atleta').toLowerCase().trim();
-                                  const url = window.location.origin + "/checkout/" + athleteName + "/" + (payment.external_id || payment.id);
+                                  const url = window.location.origin + "/checkout/" + athleteName + "/" + payment.id;
                                   window.open(url, '_blank');
                                 }}
                                 className="w-8 h-8 rounded-xl bg-surface-soft border border-border-main flex items-center justify-center text-text-muted hover:text-primary hover:border-primary/40 transition-all shadow-sm"
@@ -1110,7 +1126,7 @@ export default function PerfilAtleta() {
                                 onClick={() => {
                                   const amountStr = Number(payment.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
                                   const athleteName = (athlete.nickname || athlete.full_name.split(' ')[0] || 'atleta').toLowerCase().trim();
-                                  const url = window.location.origin + "/checkout/" + athleteName + "/" + (payment.external_id || payment.id);
+                                  const url = window.location.origin + "/checkout/" + athleteName + "/" + payment.id;
                                   const clubName = organization?.name || 'Clube';
                                   const message = `Olá ! Aqui esta a mensalidade no valor R$ ${amountStr},\nAcesse o link abaixo e efeute o pagamento\n\n${url}\n\n- ${clubName}`;
                                   const phone = currentSubscription?.payer_phone?.replace(/\D/g, '') || athlete.whatsapp?.replace(/\D/g, '');

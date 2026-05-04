@@ -51,7 +51,10 @@ export default function Checkout() {
   const loadCheckoutData = async () => {
     try {
       setLoading(true);
-      const { data: payment, error: paymentError } = await supabase
+      // Se o ID parece um UUID, buscamos por ID, senão apenas por external_id
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || '');
+      
+      let query = supabase
         .from('subscription_payments')
         .select(`
           *,
@@ -68,9 +71,15 @@ export default function Checkout() {
               name
             )
           )
-        `)
-        .or(`id.eq.${id},external_id.eq.${id}`)
-        .maybeSingle();
+        `);
+
+      if (isUUID) {
+        query = query.or(`id.eq.${id},external_id.eq.${id}`);
+      } else {
+        query = query.eq('external_id', id);
+      }
+
+      const { data: payment, error: paymentError } = await query.maybeSingle();
 
       if (paymentError) throw paymentError;
 
