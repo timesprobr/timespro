@@ -9,7 +9,8 @@ import {
   Loader2,
   Trash2,
   Edit3,
-  ChevronDown
+  ChevronDown,
+  TrendingUp
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useOrg } from '../context/OrgContext';
@@ -244,6 +245,10 @@ export default function Mensalidades() {
             billing_period: p.billing_period
           };
 
+          if (planData.amount < 30) {
+            throw new Error(`O valor mínimo para qualquer plano deve ser R$ 30,00. O plano "${p.name}" está com R$ ${p.amount}.`);
+          }
+
           if ((p as any).id) {
             await supabase!.from('membership_plans').update(planData).eq('id', (p as any).id);
           } else {
@@ -265,6 +270,14 @@ export default function Mensalidades() {
           .single();
 
         if (mError) throw mError;
+
+        // Validate minimum amount
+        for (const p of mPlans) {
+          const amount = parseFloat(p.amount.replace(/\./g, '').replace(',', '.'));
+          if (amount < 30) {
+            throw new Error(`O valor mínimo para qualquer plano deve ser R$ 30,00. O plano "${p.name}" está com R$ ${p.amount}.`);
+          }
+        }
 
         const plansToInsert = mPlans.map(p => ({
           organization_id: organization.id,
@@ -609,7 +622,22 @@ export default function Mensalidades() {
                 <X size={20} className="text-[var(--text-muted)]" />
               </button>
             </div>
-            <form onSubmit={handleCreateMembership} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+            
+            {/* Alerta de Taxas */}
+            <div className="mx-6 mt-6 p-4 bg-primary/5 border border-primary/20 rounded-2xl flex items-start gap-3">
+              <div className="p-2 bg-primary/10 text-primary rounded-lg">
+                <TrendingUp size={14} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Taxa de Processamento</p>
+                <p className="text-[9px] font-bold text-[var(--text-muted)] mt-0.5">
+                  Sobre cada transação deste plano, será descontado <span className="text-primary">R$ 1,00 + 3,99%</span>. 
+                  O valor líquido será creditado na sua carteira.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateMembership} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] ml-1">Nome da Mensalidade</label>
                 <input 

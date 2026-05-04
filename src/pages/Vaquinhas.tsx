@@ -881,11 +881,27 @@ export default function Vaquinhas() {
                       </div>
                     </div>
 
-                    <div className="p-6 rounded-3xl bg-primary/5 border border-primary/10 flex items-center gap-4">
-                      <div className="p-3 bg-primary text-black rounded-2xl">
-                        <Target size={24} />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="p-6 rounded-3xl bg-primary/5 border border-primary/10 flex items-center gap-4">
+                        <div className="p-3 bg-primary text-black rounded-2xl">
+                          <TrendingUp size={24} />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-primary">Taxa da Plataforma</p>
+                          <p className="text-[9px] font-bold text-[var(--text-muted)] mt-0.5">
+                            Campanhas possuem uma taxa de <span className="text-primary">6%</span> sobre o bruto arrecadado.
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-[10px] font-bold text-[var(--text-muted)] leading-relaxed uppercase">Dica: Campanhas com metas realistas e prazos definidos têm 40% mais chance de sucesso.</p>
+
+                      <div className="p-6 rounded-3xl bg-[var(--surface-soft)] border border-[var(--border)] flex items-center gap-4">
+                        <div className="p-3 bg-[var(--text-muted)]/10 text-[var(--text-muted)] rounded-2xl">
+                          <Target size={24} />
+                        </div>
+                        <p className="text-[9px] font-bold text-[var(--text-muted)] leading-relaxed uppercase">
+                          Dica: Campanhas com metas realistas têm mais chance de sucesso.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
