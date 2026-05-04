@@ -24,22 +24,23 @@ Deno.serve(async (req) => {
 
     // Eventos de sucesso no AbacatePay
     if (event === 'billing.paid' || event === 'checkout.completed' || event === 'transparent.completed') {
-      const paymentId = data.externalId // UUID da mensalidade ou ID da transação da vaquinha
+      const paymentId = data.externalId 
       const metadata = data.metadata || {}
-      const amount = data.amount / 100 // O AbacatePay envia em centavos? Vamos conferir. 
-                                       // Geralmente APIs enviam centavos. 
-                                       // Se amount for 200, vira 2.00.
+      const rawAmount = data.amount
+      const amount = rawAmount / 100 
       
-      console.log(`Processando pagamento: ${paymentId}, Valor: ${amount}, Metadata:`, metadata)
+      console.log(`Processando pagamento: ${paymentId}, Valor Bruto: ${amount}, Metadata:`, metadata)
       
       let netAmount = amount
       let title = 'Receita'
       let responsibleName = 'Sistema'
       let organizationId = ''
+      let paymentType = metadata.type || 'other'
 
       // 1. Identificar o Tipo de Pagamento e Calcular Taxas
-      // Se for Mensalidade (UUID local)
-      if (paymentId && paymentId.length > 30) { 
+      
+      // CASO A: MENSALIDADE (paymentId longo ou metadata.type === 'monthly')
+      if (paymentId && paymentId.length > 30 || paymentType === 'monthly') {
         // Taxa Mensalidade: R$ 1,00 + 3,99%
         const fee = 1.00 + (amount * 0.0399)
         netAmount = amount - fee
@@ -49,14 +50,14 @@ Deno.serve(async (req) => {
           .from('subscription_payments')
           .select('*, athlete_subscriptions(athletes(full_name))')
           .eq('id', paymentId)
-          .single()
+          .maybeSingle()
 
         if (pInfo) {
           organizationId = pInfo.organization_id
           responsibleName = pInfo.athlete_subscriptions?.athletes?.full_name || 'Atleta'
           title = `Mensalidade: ${responsibleName}`
           
-          // Atualizar mensalidade
+          // Atualizar status do pagamento
           await supabaseClient
             .from('subscription_payments')
             .update({ 
@@ -67,75 +68,88 @@ Deno.serve(async (req) => {
             .eq('id', paymentId)
         }
       } 
-      // Se for Vaquinha (ExternalId começa com tx_ ou metadata tem type: vaquinha)
-      else if (paymentId?.startsWith('tx_') || metadata.type === 'vaquinha') {
+      // CASO B: VAQUINHA (externalId começa com tx_ ou metadata.type === 'vaquinha')
+      else if (paymentId?.startsWith('tx_') || paymentType === 'vaquinha') {
         // Taxa Vaquinha: 6%
         const fee = amount * 0.06
         netAmount = amount - fee
         
-        // Buscar transação da carteira
-        const { data: txInfo } = await supabaseClient
-          .from('wallet_transactions')
-          .select('*, wallets(organization_id)')
-          .eq('abacate_billing_id', data.id)
-          .single()
-
-        if (txInfo) {
-          organizationId = txInfo.wallets?.organization_id
-          title = txInfo.description || 'Contribuição Vaquinha'
-          responsibleName = 'Doador Anônimo'
+        // Buscar transação da carteira ou campanha
+        // Se for doação via checkout, podemos ter o campaign_id no metadata
+        if (metadata.campaign_id) {
+          // Tentar descobrir a organization_id via campanha
+          const { data: campaign } = await supabaseClient
+            .from('campaigns')
+            .select('*, organization_id') // Assumindo que campaigns tem organization_id
+            .eq('id', metadata.campaign_id)
+            .maybeSingle()
           
-          // Atualizar transação da carteira
-          await supabaseClient
-            .from('wallet_transactions')
-            .update({ status: 'completed' })
-            .eq('id', txInfo.id)
+          if (campaign) {
+            organizationId = campaign.organization_id
+            title = `Doação: ${campaign.title}`
+            responsibleName = 'Doador Anônimo'
 
-          // Atualizar saldo da carteira (disponível)
-          if (organizationId) {
-             const { data: wallet } = await supabaseClient
-               .from('wallets')
-               .select('balance')
-               .eq('organization_id', organizationId)
-               .single()
-             
-             if (wallet) {
-               await supabaseClient
-                 .from('wallets')
-                 .update({ balance: wallet.balance + netAmount })
-                 .eq('organization_id', organizationId)
-             }
-          }
-
-          // Se tiver campaign_id no metadata, atualizar valor arrecadado na campanha
-          if (metadata.campaign_id) {
-            const { data: campaign } = await supabaseClient
+            // Atualizar valor arrecadado na campanha (Bruto)
+            await supabaseClient
               .from('campaigns')
-              .select('current_amount')
+              .update({ current_amount: (campaign.current_amount || 0) + amount })
               .eq('id', metadata.campaign_id)
-              .single()
-            
-            if (campaign) {
-              await supabaseClient
-                .from('campaigns')
-                .update({ current_amount: campaign.current_amount + amount }) // Na campanha mostramos o bruto? 
-                                                                             // Geralmente sim, mas o clube recebe o líquido.
-                .eq('id', metadata.campaign_id)
-            }
           }
         }
       }
 
-      // 2. Registrar no Fluxo de Caixa (Valor Líquido)
+      // 2. Processamento Universal de Carteira e Financeiro
       if (organizationId) {
-        console.log(`Registrando receita líquida no financeiro: R$ ${netAmount.toFixed(2)}`)
-        
+        console.log(`Registrando valor líquido: R$ ${netAmount.toFixed(2)} para Org: ${organizationId}`)
+
+        // A. Atualizar ou Criar Carteira
+        const { data: wallet } = await supabaseClient
+          .from('wallets')
+          .select('id, balance')
+          .eq('organization_id', organizationId)
+          .maybeSingle()
+
+        let walletId;
+        if (!wallet) {
+          const { data: newWallet, error: createError } = await supabaseClient
+            .from('wallets')
+            .insert({ organization_id: organizationId, balance: netAmount })
+            .select('id')
+            .single()
+          if (createError) throw createError
+          walletId = newWallet.id
+        } else {
+          const { error: updateError } = await supabaseClient
+            .from('wallets')
+            .update({ 
+              balance: (Number(wallet.balance) || 0) + netAmount,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', wallet.id)
+          if (updateError) throw updateError
+          walletId = wallet.id
+        }
+
+        // B. Registrar Transação na História da Carteira
+        await supabaseClient
+          .from('wallet_transactions')
+          .insert({
+            wallet_id: walletId,
+            amount: netAmount,
+            type: 'income',
+            category: paymentType,
+            description: title,
+            status: 'completed',
+            abacate_billing_id: data.id
+          })
+
+        // C. Registrar no Fluxo de Caixa (Dashboard)
         await supabaseClient
           .from('financial_transactions')
           .insert({
             organization_id: organizationId,
-            title: title,
-            amount: netAmount, // VALOR LÍQUIDO CONFORME MODELO DE NEGÓCIO
+            title: title + ' (Líquido)',
+            amount: netAmount,
             type: 'income',
             status: 'paid',
             date: new Date().toISOString().split('T')[0],
