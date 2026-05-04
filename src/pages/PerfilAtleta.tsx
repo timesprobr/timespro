@@ -387,15 +387,16 @@ export default function PerfilAtleta() {
     const selectedPlan = memberships.flatMap(m => m.plans).find(p => p.id === selectedPlanId);
     const planName = isFree ? 'ISENÇÃO (GRATUITO)' : selectedPlan?.name || '---';
 
-    openConfirmModal({
+    setConfirmConfig({
       title: "Confirmar Alteração?",
-      description: `Você está definindo o plano "${planName}" com vencimento todo dia ${dueDay}. Deseja prosseguir com a ativação?`,
+      description: `Plano: ${planName}\nVencimento: Todo dia ${dueDay}\n\nDeseja confirmar estas alterações?`,
       type: "warning",
-      onConfirm: () => {
+      onConfirm: async () => {
         setIsConfirmModalOpen(false);
-        handleSaveSubscription();
+        await executeSaveSubscription();
       }
     });
+    setIsConfirmModalOpen(true);
   };
 
   const fetchMemberships = async () => {
@@ -1025,7 +1026,8 @@ export default function PerfilAtleta() {
                             <div className="flex items-center justify-center gap-2">
                               <button
                                 onClick={() => {
-                                  const url = payment.checkout_url || `https://checkout.abacatepay.com/pay/${payment.external_id || payment.id}`;
+                                  const athleteName = (athlete.nickname || athlete.full_name.split(' ')[0] || 'atleta').toLowerCase().trim();
+                                  const url = window.location.origin + "/checkout/" + athleteName + "/" + (payment.external_id || payment.id);
                                   window.open(url, '_blank');
                                 }}
                                 className="w-8 h-8 rounded-xl bg-surface-soft border border-border-main flex items-center justify-center text-text-muted hover:text-primary hover:border-primary/40 transition-all shadow-sm"
@@ -1036,7 +1038,8 @@ export default function PerfilAtleta() {
                               <button
                                 onClick={() => {
                                   const amountStr = Number(payment.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-                                  const url = payment.checkout_url || `https://checkout.abacatepay.com/pay/${payment.external_id || payment.id}`;
+                                  const athleteName = (athlete.nickname || athlete.full_name.split(' ')[0] || 'atleta').toLowerCase().trim();
+                                  const url = window.location.origin + "/checkout/" + athleteName + "/" + (payment.external_id || payment.id);
                                   const clubName = organization?.name || 'Clube';
                                   const message = `Olá! Aqui está a mensalidade no valor R$ ${amountStr}.\nAcesse o link abaixo e efetue o pagamento:\n\n${url}\n\n- ${clubName}`;
                                   const phone = currentSubscription?.payer_phone?.replace(/\D/g, '') || athlete.whatsapp?.replace(/\D/g, '');
