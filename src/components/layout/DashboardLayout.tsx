@@ -20,13 +20,15 @@ import {
   ChevronRight,
   Heart,
   CreditCard,
-  Ticket
+  Ticket,
+  MessageCircle
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { useOrg } from '../../context/OrgContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 
 interface SidebarItemProps {
   icon: React.ElementType;
@@ -73,9 +75,22 @@ const SidebarItem = ({ icon: Icon, label, href, active, collapsed, onClick }: Si
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
+  const [supportMessage, setSupportMessage] = useState('');
   const location = useLocation();
   const { organization } = useOrg();
   const { theme, toggleTheme } = useTheme();
+  const { user, signOut } = useAuth();
+
+  const MAX_CHARS = 500;
+
+  const handleSendSupport = () => {
+    const encodedMessage = encodeURIComponent(supportMessage);
+    window.open(`https://wa.me/5527999205531?text=${encodedMessage}`, '_blank');
+    setIsSupportModalOpen(false);
+    setSupportMessage('');
+  };
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/painel' },
@@ -230,6 +245,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             <div className="flex items-center gap-3">
               <button 
+                onClick={() => setIsSupportModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-[var(--surface-soft)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-strong)] transition-all border border-[var(--border)] group"
+              >
+                <MessageCircle size={14} className="group-hover:text-primary transition-all" strokeWidth={2.5} />
+                <span className="text-[10px] font-black uppercase tracking-widest">Suporte</span>
+              </button>
+
+              <button 
                 onClick={toggleTheme}
                 className="p-2 rounded-lg hover:bg-[var(--surface-soft)] text-[var(--text-muted)] transition-all flex items-center justify-center"
                 title={theme === 'light' ? 'Modo Escuro' : 'Modo Claro'}
@@ -238,12 +261,51 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </button>
               <div className="h-4 w-px bg-[var(--border)] mx-1" />
 
-              <button className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-[var(--surface-soft)] transition-all group">
-                <div className="w-7 h-7 rounded-full bg-[var(--surface-strong)] flex items-center justify-center text-[var(--text-muted)]">
-                  <UserCircle size={18} />
-                </div>
-                <span className="text-xs font-semibold text-[var(--text-muted)]">Admin</span>
-              </button>
+              <div className="relative">
+                <button 
+                  onClick={() => setIsProfileOpen(!isProfileOpen)}
+                  className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-[var(--surface-soft)] transition-all group"
+                >
+                  <div className="w-7 h-7 rounded-full bg-[var(--surface-strong)] flex items-center justify-center text-[var(--text-muted)] group-hover:text-primary transition-colors">
+                    <UserCircle size={18} />
+                  </div>
+                  <span className="text-xs font-semibold text-[var(--text-muted)] group-hover:text-[var(--text)] transition-colors">Perfil</span>
+                </button>
+
+                <AnimatePresence>
+                  {isProfileOpen && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => setIsProfileOpen(false)} 
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                        className="absolute right-0 mt-2 w-56 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl z-50 overflow-hidden"
+                      >
+                        <div className="p-3 border-b border-[var(--border)] bg-[var(--surface-soft)]/50">
+                          <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-1">Conta</p>
+                          <p className="text-[12px] font-medium text-[var(--text)] truncate">{user?.email}</p>
+                        </div>
+                        <div className="p-1">
+                          <button
+                            onClick={() => {
+                              signOut();
+                              setIsProfileOpen(false);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 rounded-lg transition-colors text-left"
+                          >
+                            <LogOut size={16} />
+                            <span className="font-medium">Sair da conta</span>
+                          </button>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </header>
 
@@ -261,6 +323,66 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </main>
       </div>
+
+      {/* Support Modal */}
+      <AnimatePresence>
+        {isSupportModalOpen && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSupportModalOpen(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-[var(--surface)] w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl border border-[var(--border)] relative z-10"
+            >
+              <div className="p-8">
+                <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-6">
+                  <MessageCircle size={24} />
+                </div>
+                
+                <h3 className="text-base font-black uppercase tracking-widest text-[var(--text)] italic mb-2">Suporte TimesPro</h3>
+                <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase leading-relaxed mb-6">
+                  Você está abrindo um pedido de suporte. Descreva o seu problema ou dúvida abaixo e nossa equipe entrará em contato via WhatsApp.
+                </p>
+
+                <div className="relative">
+                  <textarea
+                    value={supportMessage}
+                    onChange={(e) => setSupportMessage(e.target.value.slice(0, MAX_CHARS))}
+                    placeholder="Como podemos ajudar?"
+                    className="w-full h-32 bg-[var(--surface-soft)] border border-[var(--border)] rounded-2xl p-4 text-xs text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-none"
+                  />
+                  <div className="absolute bottom-3 right-3 text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-widest">
+                    {supportMessage.length}/{MAX_CHARS}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 bg-[var(--surface-soft)]/50 border-t border-[var(--border)] flex gap-3">
+                <button
+                  onClick={() => setIsSupportModalOpen(false)}
+                  className="flex-1 py-3.5 px-4 rounded-xl border border-[var(--border)] text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] hover:bg-[var(--surface)] transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSendSupport}
+                  disabled={!supportMessage.trim()}
+                  className="flex-1 py-3.5 px-4 rounded-xl bg-primary text-black text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:grayscale disabled:scale-100"
+                >
+                  Pedir Suporte
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
