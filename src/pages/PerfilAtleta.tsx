@@ -600,12 +600,11 @@ export default function PerfilAtleta() {
               <div className="p-5 -mt-8 relative z-10 flex flex-col flex-grow">
                 <div className="flex-grow">
                   <div className="flex flex-col">
-                    <h1 className="text-3xl font-black uppercase italic tracking-tighter text-text-main leading-none mb-1">{athlete.full_name}</h1>
+                    <h1 className="text-3xl font-black uppercase italic tracking-tighter text-text-main leading-none mb-1">{athlete.nickname || athlete.full_name}</h1>
                     <div className="flex items-center gap-3">
-                      <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] italic">{athlete.nickname || 'Sem Apelido'}</p>
+                      <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] italic">{athlete.full_name}</p>
                       {athlete.email && (
                         <div className="flex items-center gap-1 text-[9px] font-bold text-text-muted lowercase tracking-tight border-l border-border-main pl-3">
-                          <span className="opacity-50">@</span>
                           {athlete.email}
                         </div>
                       )}
@@ -874,11 +873,13 @@ export default function PerfilAtleta() {
                 </div>
 
                 <button
-                  onClick={() => setActiveTab('financeiro')}
-                  className="w-full py-3 bg-surface-soft border border-border-main rounded-xl flex items-center justify-center gap-2 hover:border-primary/40 transition-all group"
+                  onClick={() => setIsMembershipModalOpen(true)}
+                  className="w-full py-3 bg-primary rounded-xl flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(189,255,1,0.2)] hover:scale-[1.02] transition-all group"
                 >
-                  <span className="text-[8px] font-black uppercase text-text-subtle group-hover:text-text-main">Gerenciar Financeiro</span>
-                  <ChevronRight className="w-3 h-3 text-text-subtle" />
+                  <span className="text-black font-black italic uppercase text-[9px] tracking-widest">
+                    {currentSubscription ? 'Alterar Plano' : 'Selecionar Plano'}
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-black group-hover:translate-x-1 transition-transform" />
                 </button>
               </div>
             </div>

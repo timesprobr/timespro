@@ -305,16 +305,16 @@ export default function Athletes() {
           <p className="text-[var(--text-muted)] text-xs mt-2 font-medium">Comece adicionando atletas ao seu clube.</p>
         </div>
       ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {filteredAthletes.map((athlete) => (
             <div 
               key={athlete.id}
               onClick={() => navigate(`/atletas/${athlete.id}`)}
               className="group relative cursor-pointer"
             >
-              <div className="absolute inset-0 bg-primary/20 rounded-[32px] blur-xl opacity-0 group-hover:opacity-100 transition-all duration-500" />
-              <div className="relative bg-[var(--surface)] border border-[var(--border)] rounded-[32px] overflow-hidden transition-all duration-500 hover:-translate-y-2 hover:border-primary/30">
-                <div className="aspect-[4/5] relative overflow-hidden bg-[var(--surface-soft)]">
+              <div className="absolute inset-0 bg-primary/10 rounded-[24px] blur-lg opacity-0 group-hover:opacity-100 transition-all duration-500" />
+              <div className="relative bg-[var(--surface)] border border-[var(--border)] rounded-[24px] overflow-hidden transition-all duration-500 hover:-translate-y-1.5 hover:border-primary/30">
+                <div className="aspect-[3/3.5] relative overflow-hidden bg-[var(--surface-soft)]">
                   {athlete.photo_url ? (
                     <img 
                       src={athlete.photo_url} 
@@ -323,19 +323,19 @@ export default function Athletes() {
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)]">
-                      <Users size={64} />
+                      <Users size={32} />
                     </div>
                   )}
                   
-                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent opacity-60" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80" />
                   
-                  <div className="absolute top-4 right-4 bg-black/80 backdrop-blur-md border border-white/10 w-10 h-10 rounded-full flex items-center justify-center shadow-lg">
-                    <span className="text-primary font-black italic tracking-tighter text-lg">{athlete.number || '--'}</span>
+                  <div className="absolute top-2 right-2 bg-black/80 backdrop-blur-md border border-white/10 w-7 h-7 rounded-full flex items-center justify-center shadow-lg">
+                    <span className="text-primary font-black italic tracking-tighter text-xs">{athlete.number || '--'}</span>
                   </div>
                   
-                  <div className="absolute top-4 left-4">
+                  <div className="absolute top-2 left-2">
                     <span className={cn(
-                      "px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.2em] backdrop-blur-md border",
+                      "px-2 py-0.5 rounded-full text-[6px] font-black uppercase tracking-widest backdrop-blur-md border",
                       athlete.status === 'Ativo' 
                         ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
                         : "bg-rose-500/10 text-rose-400 border-rose-500/20"
@@ -343,41 +343,37 @@ export default function Athletes() {
                       {athlete.status}
                     </span>
                   </div>
+
+                  <div className="absolute bottom-2 left-3 right-3">
+                    <span className="text-[7px] font-black uppercase text-primary tracking-widest block mb-0.5">{athlete.position}</span>
+                    <h3 className="text-[11px] font-black uppercase italic tracking-tighter text-white truncate leading-tight">
+                      {athlete.nickname || athlete.full_name.split(' ')[0]}
+                    </h3>
+                  </div>
                 </div>
 
-                <div className="p-5">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[9px] font-black uppercase text-primary tracking-widest">{athlete.position}</span>
-                    <ChevronRight size={14} className="text-zinc-400 group-hover:text-primary transition-colors" />
-                  </div>
-                  <h3 className="text-lg font-black uppercase italic tracking-tighter text-[var(--text)] group-hover:text-primary transition-colors">
-                    {athlete.nickname || athlete.full_name}
-                  </h3>
-                  
-                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                <div className="p-2.5">
+                  <div className="flex flex-wrap gap-1 mb-2">
                     {athlete.modality_id && (
-                      <span className="px-2 py-0.5 rounded bg-[var(--surface-soft)] text-[8px] font-black uppercase text-[var(--text-muted)] border border-[var(--border)]">
+                      <span className="px-1.5 py-0.5 rounded bg-[var(--surface-soft)] text-[7px] font-black uppercase text-[var(--text-muted)] border border-[var(--border)]">
                         {modalities.find(m => m.id === athlete.modality_id)?.name}
                       </span>
                     )}
                     {athlete.category_id && (
-                      <span className="px-2 py-0.5 rounded bg-primary/10 text-primary-dark text-[8px] font-black uppercase border border-primary/20">
+                      <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary-dark text-[7px] font-black uppercase border border-primary/20">
                         {categories.find(c => c.id === athlete.category_id)?.name}
                       </span>
                     )}
                   </div>
                   
-                  <div className="flex items-center gap-4 mt-4 pt-4 border-t border-[var(--border)]">
-                    <div className="flex items-center gap-1.5">
-                      <Phone size={10} className="text-[var(--text-muted)]" />
-                      <span className="text-[10px] font-bold text-[var(--text-muted)]">{athlete.phone || 'N/A'}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 ml-auto">
-                      <Clock size={10} className="text-[var(--text-muted)]" />
-                      <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase">
+                  <div className="flex items-center justify-between opacity-60">
+                    <div className="flex items-center gap-1">
+                      <Clock size={8} />
+                      <span className="text-[8px] font-bold uppercase">
                         {athlete.birth_date ? `${new Date().getFullYear() - new Date(athlete.birth_date).getFullYear()} ANOS` : 'N/A'}
                       </span>
                     </div>
+                    <ChevronRight size={10} className="group-hover:text-primary transition-colors" />
                   </div>
                 </div>
               </div>
