@@ -66,10 +66,18 @@ export default function Carteira() {
     setVerifyStep('verifying');
     // Simulated validation: CNPJ must match the club's registered CNPJ
     await new Promise(r => setTimeout(r, 2000));
-    const orgCnpj = organization?.settings?.cnpj?.replace(/\D/g, '') || '';
+    const orgCnpj = (organization?.cnpj || organization?.settings?.cnpj)?.replace(/\D/g, '') || '';
     const inputCnpj = pixCnpj.replace(/\D/g, '');
+    
     if (pixType === 'cnpj' && orgCnpj && inputCnpj !== orgCnpj) {
       setVerifyStep('error'); return;
+    }
+
+    // Adicional: se o clube não tiver CNPJ cadastrado, avise que ele precisa cadastrar nas configurações
+    if (!orgCnpj) {
+      alert('O clube não possui CNPJ cadastrado nas configurações. Por favor, cadastre o CNPJ do clube primeiro.');
+      setVerifyStep('form');
+      return;
     }
     try {
       await supabase!.from('wallets').update({ bank_pix_key: pixKey, tax_id: pixCnpj }).eq('id', wallet.id);
@@ -104,12 +112,22 @@ export default function Carteira() {
 
       if (wdError) throw wdError;
 
-      // 2. Registrar no Fluxo de Caixa como Despesa (Saída)
+      // 2. Atualizar saldo da carteira (subtrair o valor do saque)
+      const { error: walletError } = await supabase!
+        .from('wallets')
+        .update({ 
+          balance: wallet.balance - totalAmount 
+        })
+        .eq('id', wallet.id);
+
+      if (walletError) throw walletError;
+
+      // 3. Registrar no Fluxo de Caixa como Despesa (Saída)
       await supabase!
         .from('financial_transactions')
         .insert({
           organization_id: organization!.id,
-          title: `Saque solicitado (Taxa R$ ${fee.toFixed(2)})`,
+          title: `Saque solicitado (Chave: ${wallet.bank_pix_key})`,
           amount: totalAmount,
           type: 'expense',
           status: 'pending',
@@ -117,11 +135,13 @@ export default function Carteira() {
           responsible_name: organization!.name
         });
 
+      setWithdrawAmount('');
       setIsWithdrawModalOpen(false); 
       fetchWalletData();
+      alert('Solicitação de saque enviada com sucesso! O valor será processado em até 24h.');
     } catch (err) { 
       console.error(err);
-      alert('Erro ao solicitar saque'); 
+      alert('Erro ao solicitar saque. Verifique sua conexão.'); 
     } finally { 
       setIsSaving(false); 
     }
@@ -195,7 +215,7 @@ export default function Carteira() {
                 <div className="flex items-center gap-3">
                   <span className="text-2xl font-black italic tracking-tighter text-[var(--text-muted)]">R$ {fmt(wallet?.pending_balance || 0)}</span>
                 </div>
-                <p className="text-[7px] font-bold text-amber-500/70 uppercase tracking-wider">Previsão: D+1 (PIX)</p>
+                <p className="text-[7px] font-bold text-amber-500/70 uppercase tracking-wider">Liberação prevista: D+1 (Pix)</p>
               </div>
             </div>
           </div>
@@ -272,6 +292,34 @@ export default function Carteira() {
                 </button>
               </div>
             )}
+          </div>
+          
+          {/* Help/Info Box */}
+          <div className="bg-primary/5 rounded-[24px] border border-primary/10 p-5 space-y-3">
+            <div className="flex items-center gap-2 text-primary">
+              <Info size={16} strokeWidth={3} />
+              <h4 className="text-[10px] font-black uppercase tracking-widest italic">Como funciona?</h4>
+            </div>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <p className="text-[9px] font-black uppercase text-[var(--text)]">1. Recebimento</p>
+                <p className="text-[8px] font-bold text-[var(--text-muted)] leading-relaxed">
+                  Os pagamentos via Pix (AbacatePay) caem no Saldo a Liberar e são liquidados em sua conta em D+1.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[9px] font-black uppercase text-[var(--text)]">2. Solicitação</p>
+                <p className="text-[8px] font-bold text-[var(--text-muted)] leading-relaxed">
+                  Ao solicitar um saque, nosso sistema valida sua chave Pix vinculada ao CNPJ do clube por segurança.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[9px] font-black uppercase text-[var(--text)]">3. Payout</p>
+                <p className="text-[8px] font-bold text-[var(--text-muted)] leading-relaxed">
+                  O valor líquido (descontada a taxa de R$ 6,90) é enviado para sua conta em até 24h úteis.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
