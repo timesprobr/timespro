@@ -1729,6 +1729,7 @@ export default function PerfilAtleta() {
             </div>
           </div>
         </div>
+      )}
     </div>
   );
 }
