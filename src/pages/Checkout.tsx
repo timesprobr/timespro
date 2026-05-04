@@ -154,10 +154,17 @@ export default function Checkout() {
     }
   };
 
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
   const handlePayment = async () => {
     if (loading) return;
     if (!formData.name || !formData.taxId) {
-      alert('Por favor, preencha nome e CPF para gerar o PIX');
+      showToast('Por favor, preencha nome e CPF para gerar o PIX', 'error');
       return;
     }
 
@@ -188,12 +195,13 @@ export default function Checkout() {
           code: data.pix.code
         });
         setTimeLeft(1800);
+        showToast('PIX gerado com sucesso!', 'success');
       } else {
         throw new Error(result?.error || 'Não foi possível gerar o PIX.');
       }
     } catch (err: any) {
       console.error('Erro no pagamento:', err);
-      alert(err.message || 'Erro ao gerar pagamento. Tente novamente.');
+      showToast(err.message || 'Erro ao gerar pagamento. Tente novamente.', 'error');
     } finally {
       setLoading(false);
     }
@@ -202,7 +210,7 @@ export default function Checkout() {
   const copyPixCode = () => {
     if (pixData?.code) {
       navigator.clipboard.writeText(pixData.code);
-      alert('Código PIX copiado!');
+      showToast('Código PIX copiado!', 'success');
     }
   };
 
@@ -413,6 +421,19 @@ export default function Checkout() {
           </div>
         )}
       </main>
+
+      {/* Toast Notification System */}
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-10 duration-300 ${
+          toast.type === 'success' ? 'bg-emerald-500 text-white' : 
+          toast.type === 'error' ? 'bg-red-500 text-white' : 
+          'bg-slate-900 text-white'
+        }`}>
+          {toast.type === 'success' && <ShieldCheck className="w-5 h-5" />}
+          {toast.type === 'error' && <Info className="w-5 h-5" />}
+          <span className="text-sm font-black uppercase italic tracking-tight">{toast.message}</span>
+        </div>
+      )}
     </div>
   );
 }
