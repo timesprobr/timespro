@@ -86,9 +86,45 @@ export default function Carteira() {
     if (!wallet.bank_pix_key) { alert('Cadastre uma chave PIX primeiro'); return; }
     setIsSaving(true);
     try {
-      await supabase!.from('wallet_withdrawals').insert({ wallet_id: wallet.id, amount, fee_amount: 1.50, bank_details: { pix_key: wallet.bank_pix_key, tax_id: wallet.tax_id } });
-      setIsWithdrawModalOpen(false); fetchWalletData();
-    } catch { alert('Erro ao solicitar saque'); } finally { setIsSaving(false); }
+      const fee = 6.90;
+      const totalAmount = amount; // O clube retira 'amount' do saldo da carteira
+      
+      // 1. Criar solicitação de saque
+      const { data: wd, error: wdError } = await supabase!
+        .from('wallet_withdrawals')
+        .insert({ 
+          wallet_id: wallet.id, 
+          amount: totalAmount, 
+          fee_amount: fee, 
+          bank_details: { pix_key: wallet.bank_pix_key, tax_id: wallet.tax_id },
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (wdError) throw wdError;
+
+      // 2. Registrar no Fluxo de Caixa como Despesa (Saída)
+      await supabase!
+        .from('financial_transactions')
+        .insert({
+          organization_id: organization!.id,
+          title: `Saque solicitado (Taxa R$ ${fee.toFixed(2)})`,
+          amount: totalAmount,
+          type: 'expense',
+          status: 'pending',
+          date: new Date().toISOString().split('T')[0],
+          responsible_name: organization!.name
+        });
+
+      setIsWithdrawModalOpen(false); 
+      fetchWalletData();
+    } catch (err) { 
+      console.error(err);
+      alert('Erro ao solicitar saque'); 
+    } finally { 
+      setIsSaving(false); 
+    }
   };
 
   const fmt = (v: number) => v?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00';
@@ -380,12 +416,12 @@ export default function Carteira() {
                 </div>
                 <div className="px-4 py-3 flex justify-between items-center border-b border-[var(--border)]">
                   <span className="text-[9px] font-black uppercase text-[var(--text-muted)]">Taxa de serviço</span>
-                  <span className="text-[11px] font-black text-red-400">- R$ 1,50</span>
+                  <span className="text-[11px] font-black text-red-400">- R$ 6,90</span>
                 </div>
                 <div className="px-4 py-3 flex justify-between items-center bg-primary/5">
                   <span className="text-[9px] font-black uppercase text-primary">Você receberá</span>
                   <span className="text-base font-black text-primary italic">
-                    R$ {fmt(Math.max(0, parseFloat(withdrawAmount || '0') - 1.50))}
+                    R$ {fmt(Math.max(0, parseFloat(withdrawAmount || '0') - 6.90))}
                   </span>
                 </div>
               </div>

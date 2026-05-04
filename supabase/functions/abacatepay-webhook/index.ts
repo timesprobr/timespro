@@ -24,68 +24,126 @@ Deno.serve(async (req) => {
 
     // Eventos de sucesso no AbacatePay
     if (event === 'billing.paid' || event === 'checkout.completed' || event === 'transparent.completed') {
-      const paymentId = data.externalId // O UUID que enviamos no checkout
+      const paymentId = data.externalId // UUID da mensalidade ou ID da transação da vaquinha
+      const metadata = data.metadata || {}
+      const amount = data.amount / 100 // O AbacatePay envia em centavos? Vamos conferir. 
+                                       // Geralmente APIs enviam centavos. 
+                                       // Se amount for 200, vira 2.00.
       
-      if (paymentId) {
-        console.log(`Processando pagamento confirmando: ${paymentId}`)
+      console.log(`Processando pagamento: ${paymentId}, Valor: ${amount}, Metadata:`, metadata)
+      
+      let netAmount = amount
+      let title = 'Receita'
+      let responsibleName = 'Sistema'
+      let organizationId = ''
+
+      // 1. Identificar o Tipo de Pagamento e Calcular Taxas
+      // Se for Mensalidade (UUID local)
+      if (paymentId && paymentId.length > 30) { 
+        // Taxa Mensalidade: R$ 1,00 + 3,99%
+        const fee = 1.00 + (amount * 0.0399)
+        netAmount = amount - fee
         
-        // 1. Buscar detalhes do pagamento para criar a transação financeira
-        const { data: paymentInfo, error: fetchError } = await supabaseClient
+        // Buscar info da mensalidade
+        const { data: pInfo } = await supabaseClient
           .from('subscription_payments')
-          .select(`
-            *,
-            athlete_subscriptions (
-              athlete_id,
-              athletes (full_name)
-            )
-          `)
+          .select('*, athlete_subscriptions(athletes(full_name))')
           .eq('id', paymentId)
           .single()
 
-        if (fetchError || !paymentInfo) {
-          console.error('Erro ao buscar pagamento local:', fetchError)
-          throw new Error('Pagamento não encontrado no banco de dados local.')
+        if (pInfo) {
+          organizationId = pInfo.organization_id
+          responsibleName = pInfo.athlete_subscriptions?.athletes?.full_name || 'Atleta'
+          title = `Mensalidade: ${responsibleName}`
+          
+          // Atualizar mensalidade
+          await supabaseClient
+            .from('subscription_payments')
+            .update({ 
+              status: 'paid', 
+              paid_at: new Date().toISOString(),
+              external_id: data.id 
+            })
+            .eq('id', paymentId)
         }
-
-        // 2. Atualizar status da fatura
-        const { error: updateError } = await supabaseClient
-          .from('subscription_payments')
-          .update({ 
-            status: 'paid',
-            paid_at: new Date().toISOString(),
-            external_id: data.id,
-            payment_method: data.method === 'PIX' ? 'pix' : 'credit_card'
-          })
-          .eq('id', paymentId)
-
-        if (updateError) {
-          console.error('Erro ao atualizar status do pagamento:', updateError)
-          throw updateError
-        }
-
-        // 3. Criar registro no Fluxo de Caixa (Dashboard)
-        const athleteName = paymentInfo.athlete_subscriptions?.athletes?.full_name || 'Atleta'
+      } 
+      // Se for Vaquinha (ExternalId começa com tx_ ou metadata tem type: vaquinha)
+      else if (paymentId?.startsWith('tx_') || metadata.type === 'vaquinha') {
+        // Taxa Vaquinha: 6%
+        const fee = amount * 0.06
+        netAmount = amount - fee
         
-        const { error: txError } = await supabaseClient
+        // Buscar transação da carteira
+        const { data: txInfo } = await supabaseClient
+          .from('wallet_transactions')
+          .select('*, wallets(organization_id)')
+          .eq('abacate_billing_id', data.id)
+          .single()
+
+        if (txInfo) {
+          organizationId = txInfo.wallets?.organization_id
+          title = txInfo.description || 'Contribuição Vaquinha'
+          responsibleName = 'Doador Anônimo'
+          
+          // Atualizar transação da carteira
+          await supabaseClient
+            .from('wallet_transactions')
+            .update({ status: 'completed' })
+            .eq('id', txInfo.id)
+
+          // Atualizar saldo da carteira (disponível)
+          if (organizationId) {
+             const { data: wallet } = await supabaseClient
+               .from('wallets')
+               .select('balance')
+               .eq('organization_id', organizationId)
+               .single()
+             
+             if (wallet) {
+               await supabaseClient
+                 .from('wallets')
+                 .update({ balance: wallet.balance + netAmount })
+                 .eq('organization_id', organizationId)
+             }
+          }
+
+          // Se tiver campaign_id no metadata, atualizar valor arrecadado na campanha
+          if (metadata.campaign_id) {
+            const { data: campaign } = await supabaseClient
+              .from('campaigns')
+              .select('current_amount')
+              .eq('id', metadata.campaign_id)
+              .single()
+            
+            if (campaign) {
+              await supabaseClient
+                .from('campaigns')
+                .update({ current_amount: campaign.current_amount + amount }) // Na campanha mostramos o bruto? 
+                                                                             // Geralmente sim, mas o clube recebe o líquido.
+                .eq('id', metadata.campaign_id)
+            }
+          }
+        }
+      }
+
+      // 2. Registrar no Fluxo de Caixa (Valor Líquido)
+      if (organizationId) {
+        console.log(`Registrando receita líquida no financeiro: R$ ${netAmount.toFixed(2)}`)
+        
+        await supabaseClient
           .from('financial_transactions')
           .insert({
-            organization_id: paymentInfo.organization_id,
-            title: `Mensalidade: ${athleteName}`,
-            amount: paymentInfo.amount,
+            organization_id: organizationId,
+            title: title,
+            amount: netAmount, // VALOR LÍQUIDO CONFORME MODELO DE NEGÓCIO
             type: 'income',
             status: 'paid',
             date: new Date().toISOString().split('T')[0],
-            responsible_name: athleteName
+            responsible_name: responsibleName
           })
-
-        if (txError) {
-          console.warn('⚠️ Falha ao registrar no fluxo de caixa (mas o pagamento foi marcado como pago):', txError)
-        }
-        
-        console.log('✅ Pagamento processado, banco atualizado e fluxo de caixa registrado!')
-      } else {
-        console.warn('⚠️ Webhook recebido sem externalId. Ignorando processamento automático.')
       }
+      
+      console.log('✅ Processamento concluído com sucesso!')
     }
 
     return new Response(JSON.stringify({ success: true }), {

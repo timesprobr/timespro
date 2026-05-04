@@ -160,7 +160,10 @@ export default function Vaquinhas() {
         customerTaxId: cpf,
         externalId: transactionId,
         category: 'vaquinha',
-        metadata: { campaign_id: campaign.id }
+        metadata: { 
+          campaign_id: campaign.id,
+          type: 'vaquinha'
+        }
       });
 
       await supabase

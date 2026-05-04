@@ -39,6 +39,9 @@ serve(async (req) => {
             taxId: data.customerTaxId,
             cellphone: data.customerPhone,
             address: data.customerAddress
+          },
+          metadata: {
+            type: 'monthly'
           }
         }
       };
