@@ -131,6 +131,7 @@ export default function PerfilAtleta() {
   const [isMembershipModalOpen, setIsMembershipModalOpen] = useState(false);
   const [isDocumentModalOpen, setIsDocumentModalOpen] = useState(false);
   const [memberships, setMemberships] = useState<any[]>([]);
+  const [isDeletingPayment, setIsDeletingPayment] = useState<string | null>(null);
   const [isSavingSubscription, setIsSavingSubscription] = useState(false);
   const [payments, setPayments] = useState<any[]>([]);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -299,7 +300,7 @@ export default function PerfilAtleta() {
     setIsSavingSubscription(true);
     try {
       // 1. Salvar dados básicos no banco local
-      const { error: dbError } = await supabase!
+      const { data: subData, error: dbError } = await supabase!
         .from('athlete_subscriptions')
         .upsert({
           athlete_id: id,
@@ -323,7 +324,9 @@ export default function PerfilAtleta() {
             city: payerCity,
             state: payerState
           }
-        }, { onConflict: 'athlete_id' });
+        }, { onConflict: 'athlete_id' })
+        .select()
+        .single();
 
       if (dbError) throw dbError;
 
@@ -350,7 +353,6 @@ export default function PerfilAtleta() {
             },
             description: `Assinatura: ${selectedPlan?.name}`,
             externalId: `sub_${id}_${Date.now()}`,
-            // Se for cartão, enviamos os dados para processamento transparente
             card: paymentMethod === 'card' ? {
               number: cardNumber.replace(/\s/g, ''),
               holder: cardHolder,
@@ -363,8 +365,25 @@ export default function PerfilAtleta() {
         if (billingError) throw billingError;
         if (!billingData.success) throw new Error(billingData.error);
 
+        // 3. Registrar a fatura no banco local para aparecer no histórico
+        const abacateData = billingData.data?.billing || billingData.data;
+        const abacateId = abacateData?.id || abacateData?.pix?.id;
+
+        const { error: payError } = await supabase!
+          .from('subscription_payments')
+          .insert({
+            organization_id: organization.id,
+            subscription_id: subData.id,
+            amount: selectedPlan?.amount || 0,
+            due_date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(parseInt(dueDay)).padStart(2, '0')}`,
+            status: 'pending',
+            payment_method: paymentMethod,
+            external_id: abacateId
+          });
+
+        if (payError) console.error('Erro ao registrar fatura local:', payError);
+
         if (paymentMethod === 'pix' && billingData.data?.pix) {
-          // Mostrar QR Code Pix (Pode precisar de um modal de PIX aqui)
           showToast('Assinatura criada! Use o QR Code para pagar.', 'success');
         } else {
           showToast('Assinatura ativada com sucesso!');
@@ -380,6 +399,53 @@ export default function PerfilAtleta() {
       showToast(err.message || 'Erro ao processar assinatura', 'error');
     } finally {
       setIsSavingSubscription(false);
+    }
+  };
+
+  const handleUpdatePaymentStatus = async (paymentId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase!
+        .from('subscription_payments')
+        .update({
+          status: newStatus,
+          paid_at: newStatus === 'paid' ? new Date().toISOString() : null
+        })
+        .eq('id', paymentId);
+
+      if (error) throw error;
+      
+      // Update local state immediately for better UX
+      setPayments(prev => prev.map(p => 
+        p.id === paymentId ? { ...p, status: newStatus, paid_at: newStatus === 'paid' ? new Date().toISOString() : null } : p
+      ));
+
+      showToast(`Fatura marcada como ${newStatus === 'paid' ? 'paga' : 'pendente'}`, 'success');
+      fetchPaymentHistory(); // Refetch to sync with DB
+      fetchAthleteData();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleDeletePayment = async (paymentId: string) => {
+    try {
+      const { error } = await supabase!
+        .from('subscription_payments')
+        .delete()
+        .eq('id', paymentId);
+
+      if (error) throw error;
+
+      // Update local state immediately
+      setPayments(prev => prev.filter(p => p.id !== paymentId));
+
+      showToast('Fatura excluída com sucesso', 'success');
+      setIsDeletingPayment(null);
+      setIsConfirmModalOpen(false);
+      fetchPaymentHistory();
+      fetchAthleteData();
+    } catch (err: any) {
+      showToast(err.message, 'error');
     }
   };
 
@@ -999,9 +1065,13 @@ export default function PerfilAtleta() {
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <p className="text-[9px] font-black text-text-main uppercase">{new Date(payment.due_date).toLocaleDateString('pt-BR')}</p>
+                            <p className="text-[9px] font-black text-text-main uppercase">
+                              {payment.due_date ? payment.due_date.split('-').reverse().join('/') : '---'}
+                            </p>
                             {payment.paid_at && (
-                              <p className="text-[7px] font-bold text-emerald-500 uppercase mt-0.5">Pago em: {new Date(payment.paid_at).toLocaleDateString('pt-BR')}</p>
+                              <p className="text-[7px] font-bold text-emerald-500 uppercase mt-0.5">
+                                Pago em: {new Date(payment.paid_at).toLocaleDateString('pt-BR')}
+                              </p>
                             )}
                           </td>
                           <td className="px-6 py-4">
@@ -1014,13 +1084,11 @@ export default function PerfilAtleta() {
                               "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[8px] font-black uppercase italic tracking-widest",
                               payment.status === 'paid' ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-500" :
                                 payment.status === 'overdue' ? "bg-red-500/5 border-red-500/20 text-red-500" :
-                                  "bg-primary/5 border-primary/20 text-primary-dark"
+                                  "bg-amber-500/5 border-amber-500/20 text-amber-600"
                             )}>
-                              <div className={cn(
-                                "w-1 h-1 rounded-full",
-                                payment.status === 'paid' ? "bg-emerald-500" :
-                                  payment.status === 'overdue' ? "bg-red-500" : "bg-primary"
-                              )} />
+                              {payment.status === 'paid' ? <Check className="w-3 h-3" /> :
+                                payment.status === 'overdue' ? <AlertTriangle className="w-3 h-3" /> :
+                                  <Clock className="w-3 h-3" />}
                               {payment.status === 'paid' ? 'Pago' :
                                 payment.status === 'overdue' ? 'Atrasado' : 'Aberto'}
                             </div>
@@ -1053,6 +1121,41 @@ export default function PerfilAtleta() {
                               >
                                 <MessageCircle className="w-4 h-4" />
                               </button>
+
+                              <div className="w-px h-4 bg-border-main/50 mx-1" />
+
+                              {payment.status !== 'paid' ? (
+                                <button
+                                  onClick={() => handleUpdatePaymentStatus(payment.id, 'paid')}
+                                  className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
+                                  title="Marcar como Pago"
+                                >
+                                  <Check className="w-4 h-4" />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleUpdatePaymentStatus(payment.id, 'pending')}
+                                  className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 hover:bg-amber-500 hover:text-white transition-all shadow-sm"
+                                  title="Marcar como Aberto"
+                                >
+                                  <Clock className="w-4 h-4" />
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => {
+                                  openConfirmModal({
+                                    title: "Excluir Fatura?",
+                                    description: `Esta ação não pode ser desfeita. Deseja excluir a fatura no valor de R$ ${Number(payment.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}?`,
+                                    type: 'danger',
+                                    onConfirm: () => handleDeletePayment(payment.id)
+                                  });
+                                }}
+                                className="w-8 h-8 rounded-xl bg-red-500/5 border border-red-500/20 flex items-center justify-center text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                                title="Excluir Fatura"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -1069,6 +1172,35 @@ export default function PerfilAtleta() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
+        {isDeletingPayment && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+            <div className="bg-surface border border-border-main rounded-[32px] p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95 duration-300">
+              <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-6 mx-auto">
+                <AlertTriangle className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-xl font-black text-center text-text-main uppercase italic tracking-tighter mb-2">Excluir Fatura?</h3>
+              <p className="text-xs text-center text-text-subtle font-bold uppercase tracking-widest mb-8">
+                Esta ação não pode ser desfeita. A fatura será removida permanentemente do histórico.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsDeletingPayment(null)}
+                  className="flex-1 px-6 py-4 rounded-2xl bg-surface-soft border border-border-main text-[10px] font-black uppercase italic tracking-widest text-text-subtle hover:bg-surface-soft/80 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleDeletePayment(isDeletingPayment)}
+                  className="flex-1 px-6 py-4 rounded-2xl bg-red-500 text-white text-[10px] font-black uppercase italic tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
+                >
+                  Confirmar
+                </button>
               </div>
             </div>
           </div>
@@ -1555,6 +1687,48 @@ export default function PerfilAtleta() {
           </div>
         </div>
       )}
+
+      {/* MODAL DE CONFIRMAÇÃO (REUTILIZÁVEL) */}
+      {isConfirmModalOpen && confirmConfig && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-surface w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl border border-border-main p-8 space-y-6 animate-in zoom-in-95 duration-300">
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className={cn(
+                "w-16 h-16 rounded-3xl flex items-center justify-center shadow-xl",
+                confirmConfig.type === 'danger' ? "bg-red-500/10 text-red-500 shadow-red-500/20" :
+                confirmConfig.type === 'warning' ? "bg-amber-500/10 text-amber-500 shadow-amber-500/20" :
+                "bg-primary/10 text-primary shadow-primary/20"
+              )}>
+                {confirmConfig.type === 'danger' ? <Trash2 size={32} /> :
+                 confirmConfig.type === 'warning' ? <AlertTriangle size={32} /> :
+                 <ShieldCheck size={32} />}
+              </div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-tight text-text-main">{confirmConfig.title}</h3>
+                <p className="text-[10px] font-bold text-text-muted mt-2 whitespace-pre-wrap">{confirmConfig.description}</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={confirmConfig.onConfirm}
+                className={cn(
+                  "w-full py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-[0.98]",
+                  confirmConfig.type === 'danger' ? "bg-red-500 text-white shadow-lg shadow-red-500/30" :
+                  "bg-primary text-black shadow-lg shadow-primary/30"
+                )}
+              >
+                Confirmar
+              </button>
+              <button
+                onClick={() => setIsConfirmModalOpen(false)}
+                className="w-full py-4 bg-surface-soft border border-border-main rounded-2xl text-[10px] font-black uppercase tracking-widest text-text-muted hover:bg-surface transition-all"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
     </div>
   );
 }
