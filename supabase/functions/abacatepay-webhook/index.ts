@@ -45,16 +45,17 @@ Deno.serve(async (req) => {
         const fee = 1.00 + (amount * 0.0399)
         netAmount = amount - fee
         
-        // Buscar info da mensalidade
+        // Buscar info da mensalidade (incluindo e-mail do atleta)
         const { data: pInfo } = await supabaseClient
           .from('subscription_payments')
-          .select('*, athlete_subscriptions(athletes(full_name))')
+          .select('*, athlete_subscriptions(athletes(full_name, email))')
           .eq('id', paymentId)
           .maybeSingle()
 
         if (pInfo) {
           organizationId = pInfo.organization_id
-          responsibleName = pInfo.athlete_subscriptions?.athletes?.full_name || 'Atleta'
+          const athlete = pInfo.athlete_subscriptions?.athletes
+          responsibleName = athlete?.full_name || 'Atleta'
           title = `Mensalidade: ${responsibleName}`
           
           // Atualizar status do pagamento
@@ -66,6 +67,29 @@ Deno.serve(async (req) => {
               external_id: data.id 
             })
             .eq('id', paymentId)
+
+          // DISPARAR E-MAIL DE CONFIRMAÇÃO
+          if (athlete?.email) {
+            console.log(`[Webhook] Solicitando envio de e-mail para: ${athlete.email}`)
+            // Chamada interna para a outra Edge Function
+            await fetch(`${supabaseUrl}/functions/v1/send-email-notification`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseServiceKey}`,
+              },
+              body: JSON.stringify({
+                to: athlete.email,
+                slug: 'payment_confirmed',
+                organization_id: organizationId,
+                data: {
+                  '{{athlete_name}}': responsibleName,
+                  '{{amount}}': amount.toFixed(2),
+                  '{{due_date}}': pInfo.due_date ? new Date(pInfo.due_date).toLocaleDateString('pt-BR') : '--'
+                }
+              }),
+            }).catch(e => console.error('Erro ao chamar send-email-notification:', e))
+          }
         }
       } 
       // CASO B: VAQUINHA (externalId começa com tx_ ou metadata.type === 'vaquinha')
