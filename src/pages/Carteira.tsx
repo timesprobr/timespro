@@ -153,18 +153,49 @@ export default function Carteira() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Balance Card */}
         <div className="lg:col-span-8 space-y-4">
-          <div className="bg-[var(--surface)] p-6 rounded-[32px] border border-[var(--border)] relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform duration-700 text-[var(--text-muted)]">
-              <Wallet size={80} />
+          <div className="bg-[var(--surface)] p-8 rounded-[32px] border border-[var(--border)] relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform duration-700 text-[var(--text-muted)]">
+              <Wallet size={120} />
             </div>
-            
-            <div className="relative z-10">
-              <p className="text-[9px] font-black uppercase text-[var(--text-muted)] tracking-[0.2em] mb-2">Saldo Disponível</p>
-              <div className="flex items-center gap-3">
-                <span className="text-3xl font-black italic tracking-tighter text-[var(--text)]">R$ {fmt(wallet?.balance || 0)}</span>
-                <div className="px-2.5 py-1 bg-primary/10 text-primary rounded-full text-[8px] font-black uppercase tracking-widest border border-primary/20">
-                  Créditos Ativos
+
+            <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-8">
+              {/* Total Balance */}
+              <div className="space-y-1">
+                <p className="text-[9px] font-black uppercase text-[var(--text-muted)] tracking-[0.2em] mb-2 flex items-center gap-2">
+                  <Lock size={10} className="text-[var(--text-muted)]" /> Saldo Bruto Total
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl font-black italic tracking-tighter text-[var(--text)]">R$ {fmt((wallet?.balance || 0) + (wallet?.pending_balance || 0))}</span>
                 </div>
+                <p className="text-[7px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Soma de todos os recebíveis</p>
+              </div>
+
+              {/* Available Balance */}
+              <div className="space-y-1 p-5 bg-primary/5 rounded-[24px] border border-primary/10 relative group/card overflow-hidden">
+                <div className="absolute -right-2 -bottom-2 opacity-5 group-hover/card:scale-110 transition-all duration-500 text-primary">
+                  <CheckCircle2 size={60} />
+                </div>
+                <p className="text-[9px] font-black uppercase text-primary tracking-[0.2em] mb-2 flex items-center gap-2">
+                  <CheckCircle2 size={10} /> Saldo Disponível
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl font-black italic tracking-tighter text-[var(--text)]">R$ {fmt(wallet?.balance || 0)}</span>
+                  <div className="px-2 py-0.5 bg-primary text-black rounded-full text-[7px] font-black uppercase tracking-widest">
+                    Livre
+                  </div>
+                </div>
+                <p className="text-[7px] font-bold text-primary/70 uppercase tracking-wider">Pronto para saque</p>
+              </div>
+
+              {/* Pending Balance */}
+              <div className="space-y-1">
+                <p className="text-[9px] font-black uppercase text-amber-500 tracking-[0.2em] mb-2 flex items-center gap-2">
+                  <Clock size={10} /> Saldo a Liberar
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl font-black italic tracking-tighter text-[var(--text-muted)]">R$ {fmt(wallet?.pending_balance || 0)}</span>
+                </div>
+                <p className="text-[7px] font-bold text-amber-500/70 uppercase tracking-wider">Previsão: D+1 (PIX)</p>
               </div>
             </div>
           </div>
