@@ -3,7 +3,7 @@ import {
   Trophy, Upload, Check, Loader2, Globe, ExternalLink,
   Copy, CheckCircle2, XCircle, AlertCircle, ChevronDown,
   ArrowRight, Zap, RefreshCw, Info, Shield, Clock,
-  Plus, QrCode, Moon, Sun
+  Plus, QrCode, Moon, Sun, MessageCircle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useOrg } from '../context/OrgContext';
@@ -305,6 +305,71 @@ export default function MyTeam() {
                           </div>
                         </div>
                       </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* SEÇÃO WHATSAPP */}
+                <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[32px] p-8 space-y-6 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 bg-[#25D366]/10 text-[#25D366] rounded-xl">
+                        <MessageCircle size={18} />
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-black uppercase tracking-widest text-[var(--text)]">WhatsApp Oficial do Clube</span>
+                        <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-tight">Instância exclusiva para automações</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/10 text-red-500 text-[9px] font-black uppercase tracking-widest">
+                      <XCircle size={12} />
+                      Desconectado
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                    <div className="space-y-4">
+                      <p className="text-[11px] text-[var(--text-muted)] font-medium leading-relaxed">
+                        Conecte o WhatsApp do seu clube para habilitar o envio <span className="text-[#25D366] font-bold">automático</span> de faturas, lembretes de vencimento e alertas de atraso.
+                      </p>
+                      
+                      <div className="p-4 rounded-2xl bg-[#25D366]/5 border border-[#25D366]/10 space-y-3">
+                        <div className="flex items-center gap-2 text-[9px] font-black text-[#25D366] uppercase">
+                          <Zap size={14} /> 
+                          O que será automatizado:
+                        </div>
+                        <ul className="space-y-2">
+                          {[
+                            'Envio de faturas (PIX e Boleto)',
+                            'Lembretes (3 dias antes e no dia)',
+                            'Avisos de mensalidade atrasada',
+                            'Confirmação de recebimento'
+                          ].map((item, i) => (
+                            <li key={i} className="flex items-center gap-2 text-[10px] font-bold text-[var(--text)]">
+                              <Check size={12} className="text-[#25D366]" strokeWidth={3} /> {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <button 
+                        type="button"
+                        className="w-full py-4 bg-[#25D366] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#25D366]/20"
+                      >
+                        <QrCode size={16} />
+                        Gerar QR Code de Conexão
+                      </button>
+                    </div>
+
+                    <div className="flex flex-col items-center justify-center p-6 rounded-[32px] bg-[var(--surface-soft)] border-2 border-dashed border-[var(--border)] aspect-square relative overflow-hidden group">
+                      <QrCode size={64} className="text-[var(--text-muted)] opacity-20 group-hover:scale-110 transition-transform" />
+                      <p className="text-[10px] font-black text-[var(--text-muted)] uppercase mt-4 text-center">
+                        Aguardando comando...<br/>
+                        <span className="text-[8px] font-bold opacity-60">O QR Code aparecerá aqui</span>
+                      </p>
+                      
+                      {/* Efeito de Scan (Visual apenas) */}
+                      <div className="absolute top-0 left-0 w-full h-0.5 bg-[#25D366]/30 blur-sm animate-bounce mt-10" />
                     </div>
                   </div>
                 </div>
